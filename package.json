@@ -20,7 +20,8 @@
     "follow-up:recordings": "node --env-file=.env.local scripts/trigger-follow-up.cjs recordings",
     "db:migrate": "node scripts/migrate.mjs",
     "test:unit": "vitest run --config vitest.unit.config.mjs",
-    "teacher:pin": "tsx scripts/set-teacher-pin.ts"
+    "teacher:pin": "tsx scripts/set-teacher-pin.ts",
+    "mcp:token": "tsx scripts/create-mcp-token.ts"
   },
   "dependencies": {
     "@langchain/langgraph": "^1.5.0",

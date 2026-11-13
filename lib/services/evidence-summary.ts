@@ -16,6 +16,7 @@ export interface EvidenceObservation {
   activity_context: string | null;
   academic_year: number;
   term: string | null;
+  observation_date: string;
 }
 
 export interface EvidenceTest {
@@ -168,7 +169,7 @@ export async function buildEvidenceSummary(
     `SELECT o.observation_id, o.observation_type, o.original_observation,
             o.reviewed_observation, o.observed_at, o.teacher_id,
             o.teacher_review_status, o.subject, o.activity_context,
-            o.academic_year, o.term
+            o.academic_year, o.term, o.observation_date::text AS observation_date
      FROM observations o
      WHERE o.learner_id = $1
        AND o.school_id = $2
