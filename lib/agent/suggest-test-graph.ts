@@ -119,6 +119,18 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+// Stage log writes are started without blocking the graph, but each run awaits its
+// pending writes before returning (flushStageLogs). Previously they were
+// fire-and-forget, so on serverless hosts writes made after the response could be
+// dropped, leaving gaps in the agent logs.
+const pendingStageLogs = new Map<string, Promise<unknown>[]>();
+
+async function flushStageLogs(runId: string): Promise<void> {
+  const pending = pendingStageLogs.get(runId) ?? [];
+  pendingStageLogs.delete(runId);
+  await Promise.allSettled(pending);
+}
+
 function stageLog(
   runId: string,
   stage: string,
@@ -128,7 +140,7 @@ function stageLog(
   const write = status === "failed" ? console.error : console.info;
   write("Suggest Test graph stage", { run_id: runId, stage, status, ...details });
   if (stage === "glm_generation") return;
-  void logAgentEvent({
+  const persisted = logAgentEvent({
     run_id: runId,
     workflow: "suggest_test",
     event_type: "tool_event",
@@ -148,6 +160,9 @@ function stageLog(
       : {}),
     metadata: details,
   });
+  const pending = pendingStageLogs.get(runId) ?? [];
+  pending.push(persisted);
+  pendingStageLogs.set(runId, pending);
 }
 
 async function createToolSession(
@@ -814,6 +829,7 @@ export async function runSuggestTestGraph(
     });
     throw error;
   } finally {
+    await flushStageLogs(runId);
     await tools.close();
   }
 }

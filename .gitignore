@@ -44,3 +44,6 @@ package-lock.json
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Scripted eval runs check the harness only and are not evidence.
+evals/results/*-scripted.*
