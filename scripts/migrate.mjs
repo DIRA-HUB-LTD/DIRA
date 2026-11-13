@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Apply DIRA's schema and migrations to the database in DATABASE_URL.
 //
-//   npm run db:migrate            apply anything not yet recorded
+//   npm run db:migrate               apply anything not yet recorded
 //   npm run db:migrate -- --status   list applied / pending files, change nothing
 //
 // Each migration runs in its own transaction and is recorded in schema_migrations
@@ -17,13 +17,26 @@ import pg from "pg";
 import { BASE_SCHEMA, MIGRATIONS } from "../db/manifest.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const CRLF = new RegExp(String.fromCharCode(13, 10), "g");
+const LF = String.fromCharCode(10);
 
 export function readSql(relativePath) {
   return readFileSync(path.join(ROOT, relativePath), "utf8");
 }
 
 export function checksum(sql) {
-  return createHash("sha256").update(sql).digest("hex");
+  // Normalise line endings so Windows (CRLF) and Linux (LF) checkouts agree.
+  return createHash("sha256").update(sql.replace(CRLF, LF)).digest("hex");
+}
+
+function loadLocalEnv() {
+  for (const file of [".env.local", ".env"]) {
+    try {
+      process.loadEnvFile(path.join(ROOT, file));
+    } catch {
+      // Missing file: rely on the process environment.
+    }
+  }
 }
 
 /**
@@ -55,12 +68,11 @@ export async function runMigrations(client, { log = console.log, statusOnly = fa
     if (!applied.has(name)) plan.push({ name, recordOnly: false });
   }
 
-  const changed = [...applied.entries()].filter(([name, sum]) => {
-    if (name !== BASE_SCHEMA && !MIGRATIONS.includes(name)) return false;
-    return checksum(readSql(name)) !== sum;
-  });
-  for (const [name] of changed) {
-    log(`warning: ${name} changed after it was applied; edit a new migration instead`);
+  for (const [name, sum] of applied.entries()) {
+    if (name !== BASE_SCHEMA && !MIGRATIONS.includes(name)) continue;
+    if (checksum(readSql(name)) !== sum) {
+      log(`warning: ${name} changed after it was applied; write a new migration instead`);
+    }
   }
 
   if (statusOnly) {
@@ -93,6 +105,7 @@ export async function runMigrations(client, { log = console.log, statusOnly = fa
 }
 
 async function main() {
+  loadLocalEnv();
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) {
     console.error("DATABASE_URL is not set. Add it to .env.local (see .env.example).");

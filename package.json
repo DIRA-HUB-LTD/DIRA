@@ -18,7 +18,7 @@
     "follow-up:queue": "node --env-file=.env.local scripts/trigger-follow-up.cjs queue",
     "follow-up:dispatch": "node --env-file=.env.local scripts/trigger-follow-up.cjs dispatch",
     "follow-up:recordings": "node --env-file=.env.local scripts/trigger-follow-up.cjs recordings",
-    "db:migrate": "node --env-file-if-exists=.env.local scripts/migrate.mjs",
+    "db:migrate": "node scripts/migrate.mjs",
     "test:unit": "vitest run --config vitest.unit.config.mjs"
   },
   "dependencies": {

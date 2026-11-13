@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { BASE_SCHEMA, MIGRATIONS } from "../db/manifest.mjs";
-import { runMigrations } from "../scripts/migrate.mjs";
+import { checksum, runMigrations } from "../scripts/migrate.mjs";
 import { createTestDatabase } from "./helpers/pglite-db.mjs";
 
 let database;
@@ -11,6 +11,10 @@ afterEach(async () => {
 });
 
 describe("migration runner", () => {
+  it("gives Windows (CRLF) and Linux (LF) checkouts the same checksum", () => {
+    expect(checksum("SELECT 1;\r\nSELECT 2;\r\n")).toBe(checksum("SELECT 1;\nSELECT 2;\n"));
+  });
+
   it("builds a fresh database from the base schema and every migration", async () => {
     database = await createTestDatabase();
     const applied = await database.pool.query(
