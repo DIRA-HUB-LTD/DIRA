@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [production, main, "feature/**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Type-check, tests and build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Type-check
+        run: npx tsc --noEmit
+      - name: Unit and in-memory database tests (no Docker or network needed)
+        run: npm run test:unit
+      - name: Fetch MCP gateway tests
+        run: |
+          npm --prefix fetch-mcp-server ci --no-audit --no-fund
+          npm run test:gateway
+      - name: Production build
+        run: npx next build
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+
+  integration:
+    # The older follow-up / voice / review integration tests run against a real
+    # PostgreSQL. Non-blocking until they have a green baseline in CI.
+    name: Database integration tests (non-blocking)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: dira_dev
+          POSTGRES_USER: dira_dev
+          POSTGRES_PASSWORD: dira_local_dev_only
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U dira_dev -d dira_dev"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://dira_dev:dira_local_dev_only@localhost:5433/dira_dev
+      DIRA_TEST_DATABASE_URL: postgresql://dira_dev:dira_local_dev_only@localhost:5433/dira_dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run db:migrate
+      - run: node scripts/seed-development.cjs --confirm-development --input-dir=data/cleaned/generated_day2
+      - run: npx vitest run
