@@ -2,8 +2,84 @@ import "server-only";
 
 import { logAgentEvent } from "@/lib/agent/logger";
 
-export const DIRA_AGENT_MODEL = "glm-5.3-flash";
+/**
+ * Model provider configuration.
+ *
+ * Default: GLM-5.3 Flash on Z.AI's hosted API (ZAI_API_KEY).
+ * Self-hosted open-weights: set DIRA_MODEL_BASE_URL to any OpenAI-compatible
+ * endpoint (for example vLLM or Ollama serving an open-weights GLM or Qwen model
+ * inside the school's or DIRA's own infrastructure) plus DIRA_MODEL_NAME. Learner
+ * records then never leave infrastructure you control. DIRA_MODEL_API_KEY is
+ * optional for local servers.
+ *
+ * The configuration is read once at start-up; restart the server after changing it.
+ */
+export const ZAI_MODEL = "glm-5.3-flash";
+const ZAI_ENDPOINT = "https://api.z.ai/api/paas/v4/chat/completions";
 const GLM_REQUEST_TIMEOUT_MS = 75_000;
+
+export interface ModelConfig {
+  provider: string;
+  endpoint: string;
+  model: string;
+  apiKeyEnv: "ZAI_API_KEY" | "DIRA_MODEL_API_KEY";
+  selfHosted: boolean;
+}
+
+const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "[::1]", "host.docker.internal"]);
+
+export function resolveModelConfig(env: NodeJS.ProcessEnv = process.env): ModelConfig {
+  const baseUrl = env.DIRA_MODEL_BASE_URL?.trim();
+  if (!baseUrl) {
+    return {
+      provider: "z.ai",
+      endpoint: ZAI_ENDPOINT,
+      model: ZAI_MODEL,
+      apiKeyEnv: "ZAI_API_KEY",
+      selfHosted: false,
+    };
+  }
+  let url: URL;
+  try {
+    url = new URL(baseUrl);
+  } catch {
+    throw new GlmConfigurationError("DIRA_MODEL_BASE_URL must be a valid URL");
+  }
+  const insecureAllowed =
+    LOCAL_HOSTS.has(url.hostname) || env.DIRA_MODEL_ALLOW_INSECURE_HTTP === "true";
+  if (url.protocol !== "https:" && !(url.protocol === "http:" && insecureAllowed)) {
+    throw new GlmConfigurationError(
+      "DIRA_MODEL_BASE_URL must use https (http is allowed only for localhost, or with DIRA_MODEL_ALLOW_INSECURE_HTTP=true on a private network)",
+    );
+  }
+  if (url.username || url.password || url.search || url.hash) {
+    throw new GlmConfigurationError("DIRA_MODEL_BASE_URL must not contain credentials or query strings");
+  }
+  const model = env.DIRA_MODEL_NAME?.trim();
+  if (!model) {
+    throw new GlmConfigurationError("DIRA_MODEL_NAME is required when DIRA_MODEL_BASE_URL is set");
+  }
+  return {
+    provider: env.DIRA_MODEL_PROVIDER?.trim() || "self-hosted",
+    endpoint: `${url.href.replace(/\/+$/, "")}/chat/completions`,
+    model,
+    apiKeyEnv: "DIRA_MODEL_API_KEY",
+    selfHosted: true,
+  };
+}
+
+function safeResolveModelConfig(): ModelConfig | null {
+  try {
+    return resolveModelConfig();
+  } catch {
+    return null;
+  }
+}
+
+const STARTUP_MODEL_CONFIG = safeResolveModelConfig();
+
+/** Model name recorded in logs and saved assessments. */
+export const DIRA_AGENT_MODEL = STARTUP_MODEL_CONFIG?.model ?? ZAI_MODEL;
 
 export interface AgentFunctionTool {
   name: string;
@@ -174,8 +250,9 @@ async function requestAgentCompletion(
   messages: AgentMessage[],
   tools: AgentFunctionTool[],
 ): Promise<AgentCompletion> {
-  const apiKey = process.env.ZAI_API_KEY?.trim();
-  if (!apiKey) {
+  const config = resolveModelConfig();
+  const apiKey = process.env[config.apiKeyEnv]?.trim();
+  if (!apiKey && !config.selfHosted) {
     throw new GlmConfigurationError("ZAI_API_KEY is not configured");
   }
 
@@ -184,17 +261,18 @@ async function requestAgentCompletion(
   let response: Response;
   try {
     response = await fetch(
-      "https://api.z.ai/api/paas/v4/chat/completions",
+      config.endpoint,
       {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${apiKey}`,
+          ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: DIRA_AGENT_MODEL,
+          model: config.model,
           messages,
-          reasoning_effort: "low",
+          // Z.AI-specific; OpenAI-compatible self-hosted servers do not need it.
+          ...(config.selfHosted ? {} : { reasoning_effort: "low" }),
           ...(tools.length === 0
             ? { response_format: { type: "json_object" } }
             : {}),
@@ -222,7 +300,8 @@ async function requestAgentCompletion(
       signal.aborted ||
       (error instanceof Error && error.name === "TimeoutError");
     console.error("GLM request failed", {
-      model: DIRA_AGENT_MODEL,
+      model: config.model,
+      provider: config.provider,
       duration_ms: Date.now() - requestStartedAt,
       timeout_ms: GLM_REQUEST_TIMEOUT_MS,
       failure_type: timedOut ? "timeout" : "network",
@@ -253,7 +332,12 @@ export async function createAgentCompletion(
   context?: ModelCallContext,
 ): Promise<AgentCompletion> {
   const startedAt = Date.now();
+  const config = safeResolveModelConfig();
   try {
+    if (!config) {
+      resolveModelConfig(); // throws the specific configuration error
+      throw new GlmConfigurationError("The model provider is not configured");
+    }
     const completion = await requestAgentCompletion(messages, tools);
     if (context) {
       await logAgentEvent({
@@ -264,11 +348,16 @@ export async function createAgentCompletion(
         agent_action: "model_call",
         tool_name: "glm.chat.completions",
         status: "success",
-        provider: "z.ai",
-        model: DIRA_AGENT_MODEL,
+        provider: config.provider,
+        model: config.model,
         usage: completion.usage,
+        // Self-hosted models have no per-token bill; infrastructure cost is tracked separately.
+        ...(config.selfHosted ? { cost_status: "not_applicable" as const } : {}),
         duration_ms: Date.now() - startedAt,
-        metadata: { usage_available: completion.usage !== null },
+        metadata: {
+          usage_available: completion.usage !== null,
+          self_hosted: config.selfHosted,
+        },
       });
     }
     return completion;
@@ -282,8 +371,8 @@ export async function createAgentCompletion(
         agent_action: "model_call",
         tool_name: "glm.chat.completions",
         status: "error",
-        provider: "z.ai",
-        model: DIRA_AGENT_MODEL,
+        provider: config?.provider ?? "unconfigured",
+        model: config?.model ?? DIRA_AGENT_MODEL,
         cost_status: "unknown",
         duration_ms: Date.now() - startedAt,
         error: error instanceof Error ? error.name : "UnknownError",

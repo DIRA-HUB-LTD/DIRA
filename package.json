@@ -19,7 +19,8 @@
     "follow-up:dispatch": "node --env-file=.env.local scripts/trigger-follow-up.cjs dispatch",
     "follow-up:recordings": "node --env-file=.env.local scripts/trigger-follow-up.cjs recordings",
     "db:migrate": "node scripts/migrate.mjs",
-    "test:unit": "vitest run --config vitest.unit.config.mjs"
+    "test:unit": "vitest run --config vitest.unit.config.mjs",
+    "teacher:pin": "tsx scripts/set-teacher-pin.ts"
   },
   "dependencies": {
     "@langchain/langgraph": "^1.5.0",
