@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveTeacherContext } from "@/lib/auth/teacher-context";
+import { scheduleProfileUpdate } from "@/lib/agent/profile-update-trigger";
 import { OBSERVATION_TYPES, type ReviewObservationInput } from "@/lib/db/schema";
 import { ObservationError } from "@/lib/mcp-tools/logObservation";
 import { reviewObservation } from "@/lib/services/observation-review";
@@ -70,6 +71,9 @@ export async function PATCH(
     }
     const { observationId } = await params;
     const result = await reviewObservation(observationId, parseInput(body), context);
+    if (!result.duplicate) {
+      scheduleProfileUpdate(result.observation.learner_id, context, "observation_confirmed");
+    }
     return NextResponse.json({
       duplicate: result.duplicate,
       observation: {

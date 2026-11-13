@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getPool } from "../../../../lib/db/client";
 import { resolveTeacherContext } from "@/lib/auth/teacher-context";
+import { scheduleProfileUpdate } from "@/lib/agent/profile-update-trigger";
 import { logObservation, ObservationError } from "../../../../lib/mcp-tools/logObservation";
 import {
   CAPTURE_METHODS,
@@ -103,6 +104,10 @@ export async function POST(request: NextRequest) {
     }
 
     const result = await logObservation(parseInput(body), context);
+    if (!result.duplicate && result.observation.linked_test_id) {
+      // A recorded test outcome: the profile may now be assessable.
+      scheduleProfileUpdate(result.observation.learner_id, context, "test_outcome_recorded");
+    }
     return NextResponse.json({
       duplicate: result.duplicate,
       observation: { observation_id: result.observation.observation_id },

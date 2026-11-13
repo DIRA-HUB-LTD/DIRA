@@ -39,6 +39,7 @@ export default defineConfig({
       "tests/mcp-tools-inventory.test.mjs",
       "tests/pathway-note.test.mjs",
       "tests/profile-update-agent.test.mjs",
+      "tests/profile-agent-integration.test.mjs",
       "tests/run-summary.test.mjs",
       "tests/education-sources.test.mjs",
     ],

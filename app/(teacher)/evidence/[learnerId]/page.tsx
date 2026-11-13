@@ -2,6 +2,7 @@ import { connection } from "next/server";
 import Card from "@/components/ui/Card";
 import EvidenceReasoning from "@/components/evidence/EvidenceReasoning";
 import PathwayNotePanel from "@/components/evidence/PathwayNotePanel";
+import ProfileAgentPanel from "@/components/evidence/ProfileAgentPanel";
 import { resolveTeacherContext } from "@/lib/auth/teacher-context";
 import { buildEvidenceSummary } from "@/lib/services/evidence-summary";
 import { loadCurrentAssessments } from "@/lib/services/evidence-reasoning";
@@ -68,6 +69,7 @@ export default async function EvidencePage({
             assessment: assessmentByTestId.get(test.test_id) ?? null,
           }))}
         />
+        <ProfileAgentPanel learnerId={learnerId} />
         <PathwayNotePanel learnerId={learnerId} />
       </main>
     );
