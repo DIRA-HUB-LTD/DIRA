@@ -1,8 +1,9 @@
 # DIRA Hub Roadmap: from demo to platform
 
-> **Status:** Plan, 13 November 2026 (revised the same day for the Agentic AI for Africa "The Long View" judging). Nothing in the code has changed yet.
+> **Status:** Plan, 13 November 2026 (revised the same day for the Agentic AI for Africa "The Long View" judging). C1–C10 implemented on branch `feature/long-view-readiness` (see §A.3b).
 >
-> ⚠️ **Do not commit this file, or any roadmap work, to the submitted repository until the organisers confirm it is safe.** Every commit in the repo is dated 8–15 October 2026. The track page lists 15 October as the deadline and says *"Commits after the deadline timestamp disqualify a submission."* See §A.1.
+> ✅ **Freeze resolved (13 Nov 2026):** the team passed round one and the organisers allowed continued work before the final. Work happens on branch `feature/long-view-readiness`.
+>
 > **Basis:** Checked against the code on branch `production` (commit `86d30d5`), GitHub issues #15–#23, `DECOUPLING_DIRA.md` and the project pitch. Anything I could not check in the code is marked **UNVERIFIED**.
 > **Audience:** The founder, plus any developer or coding agent picking up the work.
 
@@ -78,6 +79,23 @@ Source: the official track page (`agentic-africa-challenge.lovable.app/tracks/ed
 | **C8** | **Named-teacher evidence** | Classroom 20 | Interview at least one teacher (with consent to be named). Time a real post-class call. Put a short quote and the measured minutes in the README. | S |
 | **C9** | **Readable run log + cost** | Defensibility 10 | Agent-logs page: one timeline per run ID (plan → tool calls → retries → result) with tokens and **cost per run** persisted. | S–M |
 | **C10** | **Demo** | Demo 5 | A 3-minute unedited run: post-class call → draft → teacher confirms → agent updates the profile (shows its plan and tool calls) → proposes a test → **one visible failure** (e.g. retrieval down, the agent continues as `partial`) → pathway note drafted → teacher approves. | S |
+
+### A.3b Implementation status (branch `feature/long-view-readiness`, 13 Nov 2026)
+
+| Item | Status | Where |
+|---|---|---|
+| C1 Profile-update agent | ✅ Built and tested (10 unit + end-to-end) | `lib/agent/profile-update-agent.ts`, evidence page panel |
+| C2 Long view + focus list | ✅ Cross-year visibility fixed (tests fail on old code); fortnightly per-teacher focus list | `lib/auth/learner-visibility.ts`, `lib/services/focus-rotation.ts` |
+| C3 Fetch as borrowed MCP | ✅ Code side: working sources by default, single logging, configurable gateway allowlist, `npm run fetch:diagnose`. ⏳ **You:** run the diagnose command with production env vars and fix Railway/Vercel settings | `lib/services/education-retrieval.ts`, `scripts/fetch-diagnose.mjs` |
+| C4 Open weights + reusable tools | ✅ Provider switch + per-teacher MCP tokens. ⏳ **You:** record one full run on a self-hosted model | `lib/models.ts`, `lib/auth/mcp-access.ts` |
+| C5 One-command run + CI | ✅ `npm run demo`, migration runner, GitHub Actions | `scripts/demo.mjs`, `scripts/migrate.mjs`, `.github/workflows/ci.yml` |
+| C6 Honest evals | ✅ Harness, 10 tasks, repeats, variance, cost, one unfixed failure. ⏳ **You:** `npm run eval` with a model key, paste results into EVALS.md §0.4 | `evals/`, `EVALS.md` §0 |
+| C7 Pathway note + named approval | ✅ Gate, cited drafts, language guard, fail closed, PIN sign-in, approval UI | `lib/services/pathway-note.ts`, `lib/auth/teacher-session.ts` |
+| C8 Named-teacher evidence | ⏳ **You:** interview + timed call | `docs/TEACHER_EVIDENCE.md` |
+| C9 Run timeline + cost | ✅ | `lib/agent/run-summary.ts`, `/agent-logs?run_id=` |
+| C10 Demo | ✅ Script written. ⏳ **You:** record | `docs/DEMO_SCRIPT.md` |
+
+Engine extraction (P1) is still next after judging. The new code was written with that in mind: readiness, the pathway gate, the language guard, the citation validator and the run summariser are pure functions ready to move into `packages/assessment-engine`.
 
 ### A.4 Live technical review prep (no commits needed)
 

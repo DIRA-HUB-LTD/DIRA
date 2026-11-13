@@ -8,7 +8,25 @@ evidence over time. DIRA suggests; the teacher decides.
 > Every learner deserves to be seen before their potential becomes impossible
 > to ignore.
 
+## Quick start (one command)
+
+Requirements: Node.js 20.9+ (24 recommended, see `.nvmrc`) and Docker Desktop.
+
+```bash
+git clone https://github.com/DIRA-HUB-LTD/DIRA.git && cd DIRA && npm run demo
+```
+
+`npm run demo` creates `.env.local` with fresh local secrets, installs
+dependencies, starts PostgreSQL, applies every migration, seeds the synthetic
+two-year school, gives the first teacher a demo PIN (printed at the end) and
+starts the app on http://localhost:3000. Model features need `ZAI_API_KEY`, or
+`DIRA_MODEL_BASE_URL` + `DIRA_MODEL_NAME` for a self-hosted open-weights model,
+in `.env.local`. Everything uses synthetic data; the seed script refuses any
+database other than the local Docker one. See [What is unfinished](#what-is-unfinished).
+
 ## Contents
+
+- [Quick start (one command)](#quick-start-one-command)
 
 - [The problem](#the-problem)
 - [The approach](#the-approach)
@@ -23,6 +41,7 @@ evidence over time. DIRA suggests; the teacher decides.
 - [Configuration and optional integrations](#configuration-and-optional-integrations)
 - [Tests and verification](#tests-and-verification)
 - [Human judgement and safety](#human-judgement-and-safety)
+- [What is unfinished](#what-is-unfinished)
 - [Limitations and known gaps](#limitations-and-known-gaps)
 - [Business model](#business-model)
 - [Future improvements](#future-improvements)
@@ -69,17 +88,22 @@ learners operate the software.
 
 | Capability | Current status |
 |---|---|
-| Learner list, weekly focus list, and learner record | Implemented in the Next.js application; reads the configured PostgreSQL demo dataset. |
+| Learner list and learner record | Implemented; the record shows the learner's full history at this school across academic years. |
+| Fortnightly focus list | Each teacher gets up to 10 learners from their own classes for a fixed 14-day period (unobserved this year first). Stored, so it does not reshuffle mid-fortnight. |
+| Profile-update agent | GLM plans which DIRA MCP tools to call for one learner (check readiness, assess a completed test, suggest a test, draft a pathway note), re-checks after each action, and stops. Code blocks actions the evidence does not allow. Run from the evidence page, or automatically with `DIRA_PROFILE_AGENT_AUTO=true`. |
+| Early pathway note (sub-theme) | Drafted only when a deterministic gate is met (reviewed evidence from 2+ teachers, 2+ terms, 1+ completed test). Every sentence cites evidence; labels are rejected. A **named, signed-in teacher** must approve; DIRA never sends it. |
+| Teacher sign-in (pilot) | Teacher ID + PIN, signed HttpOnly session. Required for approvals. Phone OTP is the planned replacement. |
 | Typed observation capture | Implemented through the learner's Log Observation screen and persisted to PostgreSQL. |
 | Observation review | Review controls are available for records marked as awaiting teacher review. |
 | Suggest Test | Implemented as an on-demand LangGraph.js workflow; validates and persists a `SUGGESTED` activity with evidence links. |
 | Teacher decision | The learner record lets a teacher accept a suggestion or reject it and request a linked replacement. Acceptance is not completion. |
-| Evidence Card | Implemented at `/evidence/[learnerId]`; presents saved evidence and generated reasoning for teacher review. |
-| Dira-owned MCP server | Implemented at `/api/mcp/server`; local smoke evaluation discovered 13 tools and invoked education retrieval. |
+| Evidence Card | Implemented at `/evidence/[learnerId]`; includes previous years' evidence (fixed: it used to hide anything from earlier classes). |
+| Dira-owned MCP server | Implemented at `/api/mcp/server`: 15 tools. Per-teacher, hashed, revocable tokens (`npm run mcp:token`) let a school system act as a specific teacher. No tool can accept, approve or send anything. |
 | Scheduled follow-up agent | Agent and protected trigger route are implemented, but no hosting scheduler is configured. |
 | In-app microphone/transcription | Not connected. The observation composer disables voice capture. |
 | Keeper calendar MCP | Client/helper foundation exists; OAuth callback, secure token storage, and a live authenticated call are not verified. |
-| Optional Fetch MCP retrieval provider | Implemented as an optional backend; live Fetch MCP/PostgreSQL integration is not fully verified. |
+| Fetch MCP (our borrowed MCP server) | Gateway on Railway wrapping `mcp-server-fetch`. Live sources default to AMI and WWC because IB and EEF block automated requests (HTTP 403). `npm run fetch:diagnose` checks the deployment step by step. |
+| Open-weights model | `DIRA_MODEL_BASE_URL` points DIRA at any OpenAI-compatible self-hosted server (vLLM, Ollama) so learner data stays on infrastructure we control. Z.AI GLM-5.3 Flash is the default. |
 
 The project distinguishes implementation from verification: passing mocked
 tests does not prove that a live model, external website, phone provider,
@@ -239,8 +263,10 @@ provider use MCP.
 
 ### Dira-owned MCP tools
 
-The public Dira server registers these **13 Dira-owned tools**. The endpoint is
-`/api/mcp/server` and uses Streamable HTTP with a server-side bearer token.
+The public Dira server registers these **15 Dira-owned tools**. The endpoint is
+`/api/mcp/server` (Streamable HTTP). Callers authenticate with a per-teacher
+token (`npm run mcp:token -- --teacher <id> --label "<system>"`), which pins
+every call to that teacher and school, or with the shared demo token.
 
 | Tool | Main input | What it does / returns |
 |---|---|---|
@@ -251,7 +277,9 @@ The public Dira server registers these **13 Dira-owned tools**. The endpoint is
 | `retrieve_education_resources` | Bounded query; no learner ID or raw observation text | Returns an overall retrieval status and one result/status per IB, EEF, AMI, and WWC source, including retrieved URLs/excerpts or bounded error details. |
 | `persist_test_suggestion` | Learner ID, validated suggestion, submission ID, optional superseded test ID | Revalidates and saves one idempotent `SUGGESTED` activity and its evidence links. |
 | `regenerate_test_suggestion` | Learner ID, prior proposal ID, submission ID, optional superseded test ID | Validates the saved proposal, reruns the workflow with history, and saves a linked replacement. |
-| `accept_suggested_test` | Learner ID, proposal ID, planned date, submission ID, optional superseded test ID | Rechecks eligibility and updates the existing proposal to `ACCEPTED`; it does not mark it complete. |
+| `check_evidence_readiness` | Learner ID | Deterministic, read-only: observation counts across years, whether a small test is warranted, completed tests awaiting assessment, the pathway-note gate, and the actions the evidence allows. |
+| `assess_test_outcome` | Learner ID, test ID | For a completed test with a recorded outcome, classifies SUPPORTS / MIXED / CONTRADICTS / INSUFFICIENT_EVIDENCE with cited evidence and saves a new versioned assessment. |
+| `draft_pathway_note` | Learner ID | Only when the evidence gate is met: saves a fully cited DRAFT note for teacher review. Never approves or sends. |
 | `build_evidence_summary` | Learner ID | Returns saved tests, linked evidence, retrieval outcomes, and teacher-recorded outcomes for the Evidence Card. |
 | `prepare_daily_follow_up_queue` | No caller-supplied teacher identity | Idempotently creates eligible queue jobs for the server-resolved demo teacher; does not place calls. |
 | `list_due_follow_ups` | Optional bounded result limit | Returns due queued jobs for the server-resolved demo teacher. |
@@ -260,17 +288,20 @@ The public Dira server registers these **13 Dira-owned tools**. The endpoint is
 
 Tool schemas validate inputs before business logic. Tools return structured
 results/errors and do not report a write as successful before persistence is
-confirmed. The server resolves a single demo teacher; the caller cannot supply
-its own teacher or school identity.
+confirmed. The caller cannot supply its own teacher or school identity: it comes
+from the token (or, for the shared demo token, the signed-in or demo teacher).
+Accepting a test and approving a pathway note are teacher-only actions in the UI;
+`accept_suggested_test` was removed from MCP so no agent can accept on a
+teacher's behalf.
 
 ### MCP servers and verification status
 
 | Server/component | Connection and purpose | Status |
 |---|---|---|
-| **Dira MCP server (owned)** | `POST /api/mcp/server`; official MCP TypeScript SDK, Streamable HTTP, bearer token; hosts the 13 tools above. | Tool discovery and a read-only retrieval invocation were exercised by `npm run mcp:test:external`. That run confirmed the MCP response shape, not successful source retrieval or production authentication. |
+| **Dira MCP server (owned)** | `POST /api/mcp/server`; official MCP TypeScript SDK, Streamable HTTP, per-teacher or demo bearer token; hosts the 15 tools above. | Tool discovery and a read-only retrieval invocation were exercised by `npm run mcp:test:external`. That run confirmed the MCP response shape, not successful source retrieval or production authentication. |
 | **Suggest Test in-process MCP tools (owned)** | Official SDK `InMemoryTransport` between LangGraph nodes and the evidence/history/retrieval/persistence tools. | Mocked workflow tests are recorded as passing; live model and source access are separate dependencies. |
-| **Fetch MCP (borrowed, optional)** | DIRA can launch the pinned `mcp-server-fetch==2026.10.10` with `uvx` over stdio when enabled. It is a retrieval backend, not a second learner-data workflow. | Optional provider/cache code and unit tests exist. The real Fetch MCP/PostgreSQL integration was not run because `uvx.exe` was unavailable in the recorded environment; do not treat it as end-to-end verified. |
-| **Keeper.sh calendar MCP (borrowed)** | Client foundation uses the official MCP SDK and Streamable HTTP; tool calls are restricted to discovered tools marked read-only. | Not end-to-end integrated: OAuth callback handling, secure token persistence, per-teacher authorization, and a live authenticated call are absent/unverified. Calendar data is not part of Suggest Test. |
+| **Fetch MCP (borrowed)** | **Why we chose it:** `mcp-server-fetch` is the maintained reference MCP fetch server, so we did not write our own scraper; we wrap it in a small authenticated gateway (`fetch-mcp-server/`, deployed on Railway) that enforces a domain allowlist and size/time limits. Locally DIRA can also launch it over stdio with `uvx`. | Gateway unit tests pass. Live retrieval depends on deployment settings: run `npm run fetch:diagnose`. IB and EEF return 403 to automated requests, so live sources default to AMI and WWC. |
+| **Keeper.sh calendar MCP (planned)** | Client foundation uses the official MCP SDK and Streamable HTTP; tool calls are restricted to discovered tools marked read-only. | Not end-to-end integrated: OAuth callback handling, secure token persistence, per-teacher authorization, and a live authenticated call are absent/unverified. Calendar data is not part of Suggest Test. |
 
 When MCP access is not configured, the Dira HTTP endpoint returns an explicit
 service-unavailable response; a missing or invalid bearer token is unauthorized.
@@ -298,6 +329,11 @@ stale cache entries fresh.
 | Optional external services | Fetch MCP, Keeper.sh calendar MCP, OpenAI audio transcription and Africa's Talking Voice where configured; these have different implementation and verification status (see below). |
 
 ## Set up a local demo
+
+> The fastest path is the [one-command quick start](#quick-start-one-command).
+> Apply schema changes to any database with `npm run db:migrate` (tracked,
+> checksummed, safe on databases created before the runner existed). The manual
+> steps below remain for reference.
 
 ### Prerequisites
 
@@ -447,11 +483,20 @@ restrictions. Its actual MCP/PostgreSQL integration remains unverified.
 
 Available checks include:
 
-```powershell
-npm run test:suggest-test
-npm exec tsc -- --noEmit
+```bash
+npm run test:unit        # unit + in-memory PostgreSQL tests; no Docker or network needed
+npm run test:gateway     # Fetch MCP gateway tests
+npx tsc --noEmit
 npm run build
+npm run eval             # LIVE evals: real model, 5 repeats per task (needs a model key)
+npm run eval:scripted    # checks the eval harness only; not evidence
+npm run fetch:diagnose   # checks the deployed Fetch MCP path step by step
 ```
+
+`npm run test:unit` uses PGlite (PostgreSQL compiled to WebAssembly) with the
+real migrations, so database logic such as cross-year visibility, the focus list,
+pathway-note approval and MCP tokens is tested against real SQL. GitHub Actions
+runs these on every push (`.github/workflows/ci.yml`).
 
 `npm run test:suggest-test` covers the focused Suggest Test/evidence reasoning
 suite with mocked providers. The repository's recorded evaluation reports 29
@@ -495,11 +540,33 @@ teacher-recorded outcome linked to the activity can contribute outcome evidence
 for later review. Missing or conflicting evidence should be treated as a gap or
 uncertainty, not as a learner deficit.
 
+## What is unfinished
+
+We would rather you hear this from us:
+
+- **Live evals not yet recorded.** The harness (`npm run eval`) is built and
+  self-checked, but results only count once run against the real model; see
+  [`EVALS.md`](./EVALS.md). One task is a documented, unfixed failure
+  (paraphrased duplicate observations inflate the pathway gate).
+- **Open-weights run not yet recorded.** The model can be switched to a
+  self-hosted open-weights server, but the run log for a full task on one has
+  not been captured yet.
+- **Identity is a pilot.** Teacher ID + PIN, set by an administrator with
+  `npm run teacher:pin`. No admin dashboard, no coach access codes, no phone OTP yet.
+- **Production pages still require demo mode.** Without `DIRA_DEMO_MODE=true`,
+  teacher pages show "unavailable" even for a signed-in teacher.
+- **Agent logs are not scoped by school** and are a developer screen.
+- **No scheduler** runs the 07:00 call queue automatically; it is triggered manually.
+- **Transcription uses OpenAI's hosted API**, a documented exception to be
+  replaced by a self-hosted model before real learner audio is used.
+- **Keeper.sh calendar integration** is a client foundation only.
+- **School onboarding** (CSV import) is planned, not built. See `DIRA_HUB_ROADMAP.md`.
+
 ## Limitations and known gaps
 
-- **Demo identity only:** the application resolves a single teacher from the
-  development data. The Dira MCP endpoint uses a shared bearer token, not
-  authenticated per-person authorization. Neither is suitable for real
+- **Pilot identity only:** teachers can sign in with an ID and PIN, and the MCP
+  endpoint accepts per-teacher tokens, but without a signed-in teacher the app
+  still falls back to the demo teacher in demo mode. Not yet suitable for real
   learner data.
 - **No automatic scheduler:** the protected follow-up route and bounded agent
   exist, but an operator must configure and verify an external scheduler,
@@ -513,11 +580,10 @@ uncertainty, not as a learner deficit.
   callbacks, secure token persistence, teacher authorization, and a live call
   are not implemented or verified. Calendar information is not evidence that
   a lesson took place.
-- **Education retrieval is environment-dependent:** the one recorded MCP
-  smoke run returned source errors for all four domains. Fetch MCP needs
-  `uvx`; its real integration was not run in the recorded environment because
-  `uvx.exe` was unavailable. Retrieval success, speed, and source availability
-  are not guaranteed.
+- **Education retrieval is environment-dependent:** IB and EEF block automated
+  requests (HTTP 403), so live retrieval defaults to AMI and WWC. Retrieval
+  success, speed and source availability are not guaranteed; Suggest Test
+  continues with a recorded `partial`/`failed` retrieval status when it fails.
 - **Evaluation is incomplete:** automated tests cover selected mocked paths;
   conflicting-evidence handling, approval-bypass scenarios, full scheduled
   agent tool-selection behavior, and production authorization still need
