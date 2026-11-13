@@ -4,6 +4,8 @@ import { defineConfig } from "vitest/config";
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 
+// Unit and in-memory-database tests. None of these need Docker or network access.
+// (vitest.config.mjs runs the older integration tests against the local Docker database.)
 export default defineConfig({
   resolve: {
     alias: {
@@ -27,7 +29,20 @@ export default defineConfig({
       "tests/seed-staging-import.test.mjs",
       "tests/suggest-test.test.mjs",
       "tests/suggest-test-graph.test.mjs",
+      // Added for the Long View readiness work.
+      "tests/migrations.test.mjs",
+      "tests/learner-visibility.test.mjs",
+      "tests/focus-rotation.test.mjs",
+      "tests/model-provider.test.mjs",
+      "tests/teacher-session.test.mjs",
+      "tests/mcp-access.test.mjs",
+      "tests/mcp-tools-inventory.test.mjs",
+      "tests/pathway-note.test.mjs",
+      "tests/profile-update-agent.test.mjs",
+      "tests/run-summary.test.mjs",
+      "tests/education-sources.test.mjs",
     ],
     fileParallelism: false,
+    testTimeout: 60_000,
   },
 });

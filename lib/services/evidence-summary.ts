@@ -1,6 +1,7 @@
 import "server-only";
 import type { QueryResultRow } from "pg";
 import { getPool } from "@/lib/db/client";
+import { teacherCurrentlyTeachesLearnerSql } from "@/lib/auth/learner-visibility";
 import type { SuggestTestContext } from "@/lib/mcp-tools/suggestTest";
 
 export interface EvidenceObservation {
@@ -13,6 +14,8 @@ export interface EvidenceObservation {
   teacher_review_status: string;
   subject: string | null;
   activity_context: string | null;
+  academic_year: number;
+  term: string | null;
 }
 
 export interface EvidenceTest {
@@ -164,24 +167,12 @@ export async function buildEvidenceSummary(
     "observations_lookup",
     `SELECT o.observation_id, o.observation_type, o.original_observation,
             o.reviewed_observation, o.observed_at, o.teacher_id,
-            o.teacher_review_status, o.subject, o.activity_context
+            o.teacher_review_status, o.subject, o.activity_context,
+            o.academic_year, o.term
      FROM observations o
      WHERE o.learner_id = $1
        AND o.school_id = $2
-       AND EXISTS (
-         SELECT 1
-         FROM learner_enrollments e
-         JOIN timetable_assignments ta
-           ON ta.class_id = e.class_id
-          AND ta.school_id = e.school_id
-          AND ta.academic_year = e.academic_year
-         WHERE e.learner_id = o.learner_id
-           AND e.class_id = o.class_id
-           AND e.academic_year = o.academic_year
-           AND ta.teacher_id = $3
-           AND ta.valid_from <= CURRENT_DATE
-           AND (ta.valid_to IS NULL OR ta.valid_to >= CURRENT_DATE)
-       )
+       AND ${teacherCurrentlyTeachesLearnerSql("o.learner_id", "$2", "$3")}
      ORDER BY o.observed_at DESC, o.observation_id`,
     [learnerId, context.school_id, context.teacher_id],
   );
@@ -219,20 +210,12 @@ export async function buildEvidenceSummary(
        ON ato.test_id = t.test_id AND ato.learner_id = t.learner_id
      LEFT JOIN observations evidence
        ON evidence.observation_id = ato.observation_id
+      AND evidence.school_id = $2
+     JOIN teachers conducting
+       ON conducting.teacher_id = t.conducting_teacher_id
+      AND conducting.school_id = $2
      WHERE t.learner_id = $1
-       AND EXISTS (
-         SELECT 1
-         FROM learner_enrollments e
-         JOIN timetable_assignments ta
-           ON ta.class_id = e.class_id
-          AND ta.school_id = e.school_id
-          AND ta.academic_year = e.academic_year
-         WHERE e.learner_id = t.learner_id
-           AND e.school_id = $2
-           AND ta.teacher_id = $3
-           AND ta.valid_from <= CURRENT_DATE
-           AND (ta.valid_to IS NULL OR ta.valid_to >= CURRENT_DATE)
-       )
+       AND ${teacherCurrentlyTeachesLearnerSql("t.learner_id", "$2", "$3")}
      GROUP BY t.test_id, outcome.observation_id
      ORDER BY t.activity_date DESC, t.test_id`,
     [learnerId, context.school_id, context.teacher_id],

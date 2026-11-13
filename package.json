@@ -17,7 +17,9 @@
     "mcp:test:external": "tsx scripts/test-external-mcp-client.ts",
     "follow-up:queue": "node --env-file=.env.local scripts/trigger-follow-up.cjs queue",
     "follow-up:dispatch": "node --env-file=.env.local scripts/trigger-follow-up.cjs dispatch",
-    "follow-up:recordings": "node --env-file=.env.local scripts/trigger-follow-up.cjs recordings"
+    "follow-up:recordings": "node --env-file=.env.local scripts/trigger-follow-up.cjs recordings",
+    "db:migrate": "node --env-file-if-exists=.env.local scripts/migrate.mjs",
+    "test:unit": "vitest run --config vitest.unit.config.mjs"
   },
   "dependencies": {
     "@langchain/langgraph": "^1.5.0",
@@ -30,6 +32,7 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.3.15",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^20.0.0",
     "@types/pg": "^8.23.1",
@@ -40,5 +43,8 @@
     "tsx": "^4.23.15",
     "typescript": "^5.0.0",
     "vitest": "^3.2.7"
+  },
+  "engines": {
+    "node": ">=20.9.0"
   }
 }

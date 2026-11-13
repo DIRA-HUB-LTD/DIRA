@@ -28,6 +28,8 @@ interface ObservationRow {
   observed_at: Date;
   linked_test_id: string | null;
   teacher_review_status: "not_required" | "recorded" | "confirmed" | "updated";
+  class_id: string;
+  academic_year: number;
 }
 
 interface SuggestedTest {
@@ -150,13 +152,16 @@ export default async function LearnerDetailPage({
     }
 
     const observationsResult = await getPool().query<ObservationRow>(
+      // Full history at this school, across academic years (the "long view").
+      // Access was checked above: this teacher currently teaches the learner.
       `SELECT observation_id, original_observation, reviewed_observation,
-              observation_type, observed_at, linked_test_id, teacher_review_status
+              observation_type, observed_at, linked_test_id, teacher_review_status,
+              class_id, academic_year
        FROM observations
-       WHERE learner_id = $1 AND class_id = $2 AND academic_year = $3
+       WHERE learner_id = $1 AND school_id = $2
        ORDER BY observed_at DESC
-       LIMIT 10`,
-      [learnerId, learner.class_id, learner.academic_year],
+       LIMIT 30`,
+      [learnerId, context.school_id],
     );
     const testsResult = await getPool().query<SuggestedTest>(
       `SELECT test_id, suggested_activity
@@ -257,13 +262,18 @@ export default async function LearnerDetailPage({
                     </p>
                     <p className="mt-1 text-xs capitalize text-gray-500 dark:text-gray-400">
                       {formatDate(observation.observed_at)} · {observation.observation_type}
+                      {observation.academic_year !== learner.academic_year &&
+                        ` · earlier year (${observation.academic_year})`}
                       {observation.linked_test_id && ` · ${observation.linked_test_id}`}
                     </p>
                   </div>
-                  <ObservationReviewControls
-                    observation={observation}
-                    tests={testsResult.rows}
-                  />
+                  {observation.class_id === learner.class_id &&
+                    observation.academic_year === learner.academic_year && (
+                      <ObservationReviewControls
+                        observation={observation}
+                        tests={testsResult.rows}
+                      />
+                    )}
                 </div>
               ))}
             </div>

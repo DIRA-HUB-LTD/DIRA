@@ -2,6 +2,7 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 import { getPool } from "@/lib/db/client";
+import { teacherCurrentlyTeachesLearnerSql } from "@/lib/auth/learner-visibility";
 import type {
   SuggestTestContext,
   SuggestTestResult,
@@ -85,20 +86,7 @@ export async function loadLearnerSuggestionContext(
             subject, term, possible_theme, teacher_review_status
      FROM observations
      WHERE learner_id = $1 AND school_id = $2
-       AND EXISTS (
-         SELECT 1
-         FROM learner_enrollments e
-         JOIN timetable_assignments ta
-           ON ta.class_id = e.class_id
-          AND ta.school_id = e.school_id
-          AND ta.academic_year = e.academic_year
-         WHERE e.learner_id = observations.learner_id
-           AND e.class_id = observations.class_id
-           AND e.academic_year = observations.academic_year
-           AND ta.teacher_id = $3
-           AND ta.valid_from <= CURRENT_DATE
-           AND (ta.valid_to IS NULL OR ta.valid_to >= CURRENT_DATE)
-       )
+       AND ${teacherCurrentlyTeachesLearnerSql("observations.learner_id", "$2", "$3")}
      ORDER BY observed_at ASC, observation_id ASC`,
     [learnerId, context.school_id, context.teacher_id],
   );
@@ -136,20 +124,11 @@ export async function loadPreviousSuggestions(
      FROM activity_tests t
      LEFT JOIN activity_test_observations ato
        ON ato.test_id = t.test_id AND ato.learner_id = t.learner_id
+     JOIN teachers conducting
+       ON conducting.teacher_id = t.conducting_teacher_id
+      AND conducting.school_id = $2
      WHERE t.learner_id = $1
-       AND EXISTS (
-         SELECT 1
-         FROM learner_enrollments e
-         JOIN timetable_assignments ta
-           ON ta.class_id = e.class_id
-          AND ta.school_id = e.school_id
-          AND ta.academic_year = e.academic_year
-         WHERE e.learner_id = t.learner_id
-           AND e.school_id = $2
-           AND ta.teacher_id = $3
-           AND ta.valid_from <= CURRENT_DATE
-           AND (ta.valid_to IS NULL OR ta.valid_to >= CURRENT_DATE)
-       )
+       AND ${teacherCurrentlyTeachesLearnerSql("t.learner_id", "$2", "$3")}
      GROUP BY t.test_id
      ORDER BY t.activity_date DESC, t.test_id DESC
      LIMIT 20`,
