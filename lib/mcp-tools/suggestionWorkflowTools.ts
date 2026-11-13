@@ -5,7 +5,7 @@ import { z } from "zod/v4";
 import { createRunId, logToolEvent } from "@/lib/agent/logger";
 import type { SuggestTestContext, SuggestTestResult } from "@/lib/mcp-tools/suggestTest";
 import {
-  EDUCATION_SOURCES,
+  activeEducationSources,
   retrieveEducationEvidence,
 } from "@/lib/services/education-retrieval";
 import {
@@ -245,7 +245,7 @@ export function registerSuggestionWorkflowTools(
       try {
         const retrieval = await retrieveEducationEvidence(
           query,
-          EDUCATION_SOURCES,
+          activeEducationSources(),
           {
             runId: retrievalRunId,
             workflow: "suggest_test",

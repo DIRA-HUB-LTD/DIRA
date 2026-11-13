@@ -21,7 +21,8 @@
     "db:migrate": "node scripts/migrate.mjs",
     "test:unit": "vitest run --config vitest.unit.config.mjs",
     "teacher:pin": "tsx scripts/set-teacher-pin.ts",
-    "mcp:token": "tsx scripts/create-mcp-token.ts"
+    "mcp:token": "tsx scripts/create-mcp-token.ts",
+    "fetch:diagnose": "node scripts/fetch-diagnose.mjs"
   },
   "dependencies": {
     "@langchain/langgraph": "^1.5.0",

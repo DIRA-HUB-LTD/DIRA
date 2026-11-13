@@ -83,6 +83,31 @@ export const EDUCATION_SOURCES: readonly EducationSourceDefinition[] = [
   },
 ];
 
+/**
+ * Sources used for live retrieval. IB (ibo.org) and EEF block automated requests
+ * at their edge (HTTP 403 even with a browser user-agent, checked 13 Nov 2026), so
+ * live fetching them can only fail and fills the logs with errors. By default only
+ * AMI and WWC are fetched live. Override with DIRA_EDUCATION_SOURCES=AMI,WWC,EEF,...
+ */
+export const DEFAULT_LIVE_SOURCE_KEYS: readonly EducationSource["key"][] = ["AMI", "WWC"];
+
+export function activeEducationSources(
+  env: NodeJS.ProcessEnv = process.env,
+): readonly EducationSourceDefinition[] {
+  const configured = env.DIRA_EDUCATION_SOURCES?.split(",")
+    .map((key) => key.trim().toUpperCase())
+    .filter(Boolean);
+  const keys = new Set(configured?.length ? configured : DEFAULT_LIVE_SOURCE_KEYS);
+  const selected = EDUCATION_SOURCES.filter((source) => keys.has(source.key));
+  return selected.length ? selected : EDUCATION_SOURCES.filter((source) =>
+    DEFAULT_LIVE_SOURCE_KEYS.includes(source.key),
+  );
+}
+
+/** Identify DIRA honestly to the sites it reads. */
+export const DIRA_USER_AGENT =
+  "DIRA-Education-Guidance/1.1 (+https://github.com/DIRA-HUB-LTD/DIRA)";
+
 const MAX_SITEMAP_BYTES = 256_000;
 const MAX_PAGE_BYTES = 128_000;
 const MAX_PAGES_PER_SOURCE = 3;
@@ -184,7 +209,10 @@ async function fetchOfficialText(
   const startedAt = Date.now();
   try {
     const response = await fetch(url, {
-      headers: { accept: "text/html, application/xml, text/xml" },
+      headers: {
+        accept: "text/html, application/xml, text/xml",
+        "user-agent": DIRA_USER_AGENT,
+      },
       signal,
       redirect: "follow",
     });
@@ -350,6 +378,7 @@ async function validateFetchRedirects(
       headers: {
         accept: "text/html, application/xhtml+xml",
         range: "bytes=0-0",
+        "user-agent": DIRA_USER_AGENT,
       },
       redirect: "manual",
       signal,
@@ -763,15 +792,8 @@ async function retrieveFromSource(
         };
       } catch (error) {
         const retrievalError = mapFetchError(error);
-        await logRetrievalActivity(
-          runId,
-          workflow,
-          "cache_refresh_failed",
-          source,
-          "error",
-          { canonical_url: sanitizedUrl(cacheUrl), phase: "fetch_mcp" },
-          retrievalError.code,
-        );
+        // Logged once, as the fetch_request error below. (It used to be logged a
+        // second time as cache_refresh_failed, which doubled the error counts.)
         await logRetrievalActivity(
           runId,
           workflow,

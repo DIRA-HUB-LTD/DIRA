@@ -19,12 +19,27 @@ const MAX_CONCURRENT_FETCHES = 8;
 const FETCH_TIMEOUT_MS = 30_000;
 const CORRELATION_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-const ALLOWED_DOMAINS = [
+export const DEFAULT_ALLOWED_DOMAINS = [
   "ibo.org",
   "educationendowmentfoundation.org.uk",
   "montessori-ami.org",
   "ies.ed.gov",
 ];
+
+/**
+ * Domains this gateway may fetch. Defaults to DIRA's education sources; set
+ * FETCH_MCP_ALLOWED_DOMAINS (comma-separated) to run an instance for another
+ * product (e.g. Dira Kazi's workplace sources). Invalid entries are ignored.
+ */
+export function parseAllowedDomains(value) {
+  const domains = (value ?? "")
+    .split(",")
+    .map((domain) => domain.trim().toLowerCase())
+    .filter((domain) => /^(?:[a-z0-9-]+\.)+[a-z]{2,}$/.test(domain));
+  return domains.length ? domains : DEFAULT_ALLOWED_DOMAINS;
+}
+
+const ALLOWED_DOMAINS = parseAllowedDomains(process.env.FETCH_MCP_ALLOWED_DOMAINS);
 
 function logEvent(event, fields = {}) {
   console.info(
