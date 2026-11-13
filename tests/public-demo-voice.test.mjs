@@ -8,12 +8,13 @@ const database = vi.hoisted(() => ({
   client: null,
 }));
 
-vi.mock("../lib/db/client.ts", () => ({
-  pool: {
+vi.mock("../lib/db/client.ts", () => {
+  const pool = {
     connect: vi.fn(async () => database.client),
     query: vi.fn(async () => ({ rowCount: 1 })),
-  },
-}));
+  };
+  return { pool, getPool: () => pool };
+});
 
 const {
   PublicDemoCallLimitError,

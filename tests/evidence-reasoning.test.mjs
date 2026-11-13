@@ -30,12 +30,13 @@ vi.mock("@/lib/services/education-retrieval", () => ({
   }],
   retrieveEducationEvidence: mocks.retrieveEducationEvidence,
 }));
-vi.mock("@/lib/db/client", () => ({
-  pool: {
+vi.mock("@/lib/db/client", () => {
+  const pool = {
     query: mocks.poolQuery,
     connect: mocks.poolConnect,
-  },
-}));
+  };
+  return { pool, getPool: () => pool };
+});
 vi.mock("@/lib/agent/logger", () => ({
   createRunId: () => "11111111-1111-4111-8111-111111111111",
   logToolEvent: mocks.logToolEvent,
