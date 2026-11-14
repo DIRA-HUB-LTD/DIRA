@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-const { pool } = await import("../lib/db/client.ts");
+const { getPool } = await import("../lib/db/client.ts");
+const pool = getPool();
 const { reviewObservation } = await import(
   "../lib/services/observation-review.ts"
 );

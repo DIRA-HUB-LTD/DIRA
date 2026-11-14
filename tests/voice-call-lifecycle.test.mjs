@@ -2,7 +2,8 @@ import { randomUUID } from "node:crypto";
 import { afterAll, describe, expect, it, vi } from "vitest";
 
 // Voice and transcription clients refuse to call paid providers under Vitest.
-const { pool } = await import("../lib/db/client.ts");
+const { getPool } = await import("../lib/db/client.ts");
+const pool = getPool();
 const { matchLearnerCandidates } = await import(
   "../lib/services/call-observations.ts"
 );

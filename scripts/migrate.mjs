@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 // Apply DIRA's schema and migrations to the database in DATABASE_URL.
 //
 //   npm run db:migrate               apply anything not yet recorded
