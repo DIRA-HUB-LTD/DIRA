@@ -42,6 +42,7 @@ export default defineConfig({
       "tests/profile-agent-integration.test.mjs",
       "tests/run-summary.test.mjs",
       "tests/education-sources.test.mjs",
+      "tests/engine-characterization.test.mjs",
     ],
     fileParallelism: false,
     testTimeout: 60_000,
