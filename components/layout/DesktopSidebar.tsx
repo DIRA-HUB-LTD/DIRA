@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import SignInStatus from "@/components/auth/SignInStatus";
 
 const navigation = [
   { name: "This Week", href: "/this-week", current: false },
@@ -34,11 +35,8 @@ export default function DesktopSidebar() {
         </nav>
         <div className="mt-auto px-4 py-4 border-t border-gray-200 dark:border-gray-700 rounded-b-lg">
           <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 rounded-full bg-blue-600"></div>
-            <div>
-              <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Teacher Name</p>
-              <p className="text-xs text-gray-500 dark:text-gray-400">Class Teacher</p>
-            </div>
+            <div className="w-8 h-8 shrink-0 rounded-full bg-blue-600"></div>
+            <SignInStatus />
           </div>
         </div>
       </div>

@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { summarizeRun, type RunEvent } from "@/lib/agent/run-summary";
 
 type LogStatus = "started" | "success" | "error";
 
@@ -22,6 +23,7 @@ interface ActivityLog {
   cached_tokens: number | null;
   cost_usd: string | null;
   cost_status: "calculated" | "unknown" | "not_applicable" | null;
+  metadata: Record<string, unknown> | null;
 }
 
 interface LogsResponse {
@@ -86,6 +88,20 @@ export default function AgentActivityLogs() {
   useEffect(() => {
     void loadLogs();
   }, [loadLogs]);
+
+  // Deep link from the profile agent panel: /agent-logs?run_id=<uuid>
+  useEffect(() => {
+    const linkedRun = new URLSearchParams(window.location.search).get("run_id")?.trim();
+    if (linkedRun) {
+      setRunId(linkedRun);
+      setAppliedFilters((current) => ({ ...current, runId: linkedRun }));
+    }
+  }, []);
+
+  const runSummary = useMemo(
+    () => (appliedFilters.runId ? summarizeRun(logs as RunEvent[]) : null),
+    [appliedFilters.runId, logs],
+  );
 
   function applyFilters(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -185,6 +201,8 @@ export default function AgentActivityLogs() {
           </div>
         )}
 
+        {runSummary && <RunTimeline summary={runSummary} />}
+
         <div className="overflow-hidden rounded-xl border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
           <div className="overflow-x-auto">
             <table className="min-w-[1200px] w-full divide-y divide-gray-200 text-left text-sm dark:divide-gray-700">
@@ -260,5 +278,58 @@ export default function AgentActivityLogs() {
         </p>
       </div>
     </section>
+  );
+}
+
+const COST_LABEL: Record<NonNullable<ReturnType<typeof summarizeRun>>["cost_status"], string> = {
+  calculated: "",
+  partial: " (some model calls unpriced)",
+  unknown: " (price unknown)",
+  not_applicable: " (self-hosted model: no per-token cost)",
+  no_model_calls: " (no model calls)",
+};
+
+const STEP_STYLE: Record<string, string> = {
+  run: "border-blue-400",
+  model: "border-violet-400",
+  tool: "border-emerald-400",
+  blocked: "border-amber-400",
+  retrieval: "border-sky-400",
+  other: "border-gray-300",
+};
+
+/** One run, start to finish: what the agent did, in order, and what it cost. */
+function RunTimeline({ summary }: { summary: NonNullable<ReturnType<typeof summarizeRun>> }) {
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-4 dark:border-gray-700 dark:bg-gray-800">
+      <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Run timeline</h2>
+      <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
+        {summary.workflows.join(", ") || "agent run"} · outcome: <strong>{summary.outcome}</strong>
+        {summary.duration_ms !== null && ` · ${(summary.duration_ms / 1000).toFixed(1)} s`}
+      </p>
+      <dl className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+        <div><dt className="text-gray-500">Model calls</dt><dd className="font-semibold">{summary.model_calls}</dd></div>
+        <div><dt className="text-gray-500">Tool calls (blocked)</dt><dd className="font-semibold">{summary.tool_calls} ({summary.blocked_calls})</dd></div>
+        <div><dt className="text-gray-500">Tokens in / out</dt><dd className="font-semibold">{summary.input_tokens} / {summary.output_tokens}</dd></div>
+        <div>
+          <dt className="text-gray-500">Model cost for this run</dt>
+          <dd className="font-semibold">${summary.cost_usd.toFixed(6)}<span className="font-normal text-gray-500">{COST_LABEL[summary.cost_status]}</span></dd>
+        </div>
+      </dl>
+      <ol className="mt-4 space-y-2">
+        {summary.steps.map((step, index) => (
+          <li key={`${step.at}-${index}`} className={`border-l-4 pl-3 text-sm ${STEP_STYLE[step.kind]}`}>
+            <span className="text-xs text-gray-500">{new Date(step.at).toLocaleTimeString()}</span>{" "}
+            <span className={step.status === "error" ? "text-red-700 dark:text-red-400" : "text-gray-900 dark:text-gray-100"}>
+              {step.label}
+            </span>
+            {step.detail && <span className="text-gray-500 dark:text-gray-400"> · {step.detail}</span>}
+          </li>
+        ))}
+      </ol>
+      <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+        Model cost covers token pricing only; hosting and database costs are separate. No private model reasoning is logged.
+      </p>
+    </div>
   );
 }

@@ -4,19 +4,28 @@ import Card from "@/components/ui/Card";
 import Button from "@/components/ui/Button";
 import { getPool } from "@/lib/db/client";
 import { resolveTeacherContext } from "@/lib/auth/teacher-context";
+import {
+  getFocusList,
+  localDate,
+  type FocusReason,
+} from "@/lib/services/focus-rotation";
 
-interface ThisWeekLearner {
-  learner_id: string;
-  display_name: string;
-  grade_level: string;
-  stream_label: string;
-  academic_year: number;
-  last_observed_at: Date | null;
-  observation_count: number;
-}
+const REASON_LABEL: Record<FocusReason, string> = {
+  no_observation_this_year: "No observation yet this year",
+  not_observed_by_this_teacher: "You have not observed them yet",
+  least_recently_observed: "Longest since last observation",
+};
 
 function formatLastObserved(value: Date | null): string {
   return value ? new Date(value).toLocaleDateString() : "No observations recorded yet";
+}
+
+function formatPeriodDate(value: string): string {
+  return new Date(`${value}T00:00:00Z`).toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  });
 }
 
 export default async function ThisWeekPage() {
@@ -28,9 +37,9 @@ export default async function ThisWeekPage() {
   ) {
     return (
       <Card className="p-6">
-        <h1 className="text-xl font-semibold">This Week unavailable</h1>
+        <h1 className="text-xl font-semibold">Focus list unavailable</h1>
         <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
-          Weekly focus list requires an authenticated teacher session, which is not configured.
+          The focus list requires an authenticated teacher session, which is not configured.
         </p>
       </Card>
     );
@@ -41,7 +50,7 @@ export default async function ThisWeekPage() {
     if (!context) {
       return (
         <Card className="p-6">
-          <h1 className="text-xl font-semibold">This Week unavailable</h1>
+          <h1 className="text-xl font-semibold">Focus list unavailable</h1>
           <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
             Add a teacher record before viewing the single-teacher demo.
           </p>
@@ -49,82 +58,70 @@ export default async function ThisWeekPage() {
       );
     }
 
-    const result = await getPool().query<ThisWeekLearner>(
-      `SELECT
-         l.learner_id,
-         l.display_name,
-         c.grade_level,
-         c.stream_label,
-         e.academic_year,
-         COUNT(o.observation_id)::int AS observation_count,
-         MAX(o.observed_at) AS last_observed_at
-       FROM learners l
-       JOIN learner_enrollments e ON e.learner_id = l.learner_id
-       JOIN classes c
-         ON c.class_id = e.class_id
-        AND c.school_id = e.school_id
-        AND c.academic_year = e.academic_year
-       LEFT JOIN observations o
-         ON o.learner_id = l.learner_id
-        AND o.class_id = e.class_id
-        AND o.academic_year = e.academic_year
-       WHERE e.school_id = $1
-         AND e.enrolment_status <> 'Withdrawn'
-         AND e.enrolled_from <= CURRENT_DATE
-         AND (e.enrolled_to IS NULL OR e.enrolled_to >= CURRENT_DATE)
-       GROUP BY
-         l.learner_id,
-         l.display_name,
-         c.grade_level,
-         c.stream_label,
-         e.academic_year
-       ORDER BY
-         CASE WHEN MAX(o.observed_at) IS NULL THEN 0 ELSE 1 END,
-         MAX(o.observed_at) ASC NULLS FIRST,
-         l.display_name
-       LIMIT 10`,
+    const school = await getPool().query<{ timezone: string | null }>(
+      "SELECT timezone FROM schools WHERE school_id = $1",
       [context.school_id],
     );
+    const today = localDate(new Date(), school.rows[0]?.timezone);
+    const focus = await getFocusList(context, today);
+    const done = focus.learners.filter((learner) => learner.observed_this_period).length;
 
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">This Week</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+            This fortnight&apos;s focus
+          </h1>
           <p className="mt-2 text-gray-600 dark:text-gray-400">
-            This week, keep an eye out for these learners. You do not need to do anything differently—just notice what you normally notice.
+            {formatPeriodDate(focus.period_start)} – {formatPeriodDate(focus.period_end)}. Keep an
+            eye out for these learners from your classes. You do not need to do anything
+            differently—just notice what you normally notice.
           </p>
+          {focus.learners.length > 0 && (
+            <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              {done} of {focus.learners.length} observed so far this fortnight. The list stays the
+              same until the fortnight ends, so nobody is skipped.
+            </p>
+          )}
         </div>
 
-        {result.rows.length === 0 ? (
+        {focus.learners.length === 0 ? (
           <Card className="p-6">
             <p className="text-sm text-gray-600 dark:text-gray-300">
-              No currently enrolled learners were found for this teacher&apos;s school. Check that the
-              development dataset has been imported.
+              No currently enrolled learners were found in your classes. Check that the timetable
+              and enrolments have been imported.
             </p>
           </Card>
         ) : (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {result.rows.map((learner) => (
-              <Card key={`${learner.learner_id}-${learner.academic_year}`} className="p-6">
+            {focus.learners.map((learner) => (
+              <Card key={learner.learner_id} className="p-6">
                 <div className="space-y-4">
                   <div>
-                    <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                      {learner.display_name}
-                    </h2>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">
-                      {learner.grade_level} · Stream {learner.stream_label} · {learner.academic_year}
-                    </p>
+                    <div className="flex items-start justify-between gap-2">
+                      <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                        {learner.display_name}
+                      </h2>
+                      {learner.observed_this_period && (
+                        <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800 dark:bg-green-900 dark:text-green-100">
+                          Observed ✓
+                        </span>
+                      )}
+                    </div>
+                    {learner.grade_level && (
+                      <p className="text-sm text-gray-500 dark:text-gray-400">
+                        {learner.grade_level} · Stream {learner.stream_label}
+                      </p>
+                    )}
                     <p className="text-xs text-gray-500 dark:text-gray-400">
-                      Learner ID: {learner.learner_id}
+                      Why: {REASON_LABEL[learner.reason]}
                     </p>
                   </div>
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">Last observed</p>
-                      <p className="text-sm text-gray-900 dark:text-gray-100">
-                        {formatLastObserved(learner.last_observed_at)}
-                      </p>
-                    </div>
+                  <div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Last observed</p>
+                    <p className="text-sm text-gray-900 dark:text-gray-100">
+                      {formatLastObserved(learner.last_observed_at)}
+                    </p>
                   </div>
                   <div className="flex gap-2">
                     <Button size="sm" className="flex-1">
@@ -146,12 +143,13 @@ export default async function ThisWeekPage() {
       </div>
     );
   } catch (error) {
-    console.error("Failed to load this week learners:", error);
+    console.error("Failed to load the focus list:", error);
     return (
       <Card className="p-6">
-        <h1 className="text-xl font-semibold">This Week unavailable</h1>
+        <h1 className="text-xl font-semibold">Focus list unavailable</h1>
         <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
-          Could not load learners from PostgreSQL. Verify the database is healthy, initialized, and seeded.
+          Could not load learners from PostgreSQL. Verify the database is healthy, migrated
+          (npm run db:migrate), and seeded.
         </p>
       </Card>
     );

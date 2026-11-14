@@ -202,7 +202,8 @@ describe("LangGraph Suggest Test workflow", () => {
     expect(mocks.persistSuggestedProposal).not.toHaveBeenCalled();
   });
 
-  it("registers exactly thirteen public Dira MCP tools", async () => {
+  // The full inventory is asserted in tests/mcp-tools-inventory.test.mjs.
+  it("registers the public Dira MCP tools, including retrieval", async () => {
     const server = createDiraMcpServer();
     const client = new Client(
       { name: "dira-mcp-inventory-test", version: "1.0.0" },
@@ -213,7 +214,7 @@ describe("LangGraph Suggest Test workflow", () => {
     await client.connect(clientTransport);
     try {
       const tools = await client.listTools();
-      expect(tools.tools).toHaveLength(13);
+      expect(tools.tools).toHaveLength(15);
       expect(tools.tools.map((tool) => tool.name)).toContain(
         "retrieve_education_resources",
       );

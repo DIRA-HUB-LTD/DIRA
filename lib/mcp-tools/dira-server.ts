@@ -23,10 +23,15 @@ import {
   SuggestionPersistenceError,
 } from "@/lib/mcp-tools/suggestTest";
 import { registerSuggestionWorkflowTools } from "@/lib/mcp-tools/suggestionWorkflowTools";
+import { regenerateSuggestion } from "@/lib/services/suggestion-workflow";
+import type { LogObservationContext } from "@/lib/db/schema";
+import { assessEvidenceReadiness } from "@/lib/services/evidence-readiness";
+import { EvidenceSummaryNotFoundError } from "@/lib/services/evidence-summary";
 import {
-  acceptSuggestion,
-  regenerateSuggestion,
-} from "@/lib/services/suggestion-workflow";
+  assessHypothesis,
+  EvidenceReasoningError,
+} from "@/lib/services/evidence-reasoning";
+import { draftSignedSummary, SignedSummaryError } from "@/lib/services/signed-summary";
 
 function toolResult(value: unknown) {
   const text = JSON.stringify(value);
@@ -163,13 +168,32 @@ function validObservedAt(value: string): boolean {
   return Number.isFinite(Date.parse(value));
 }
 
-export function createDiraMcpServer(): McpServer {
+export type TeacherContextResolver = () => Promise<LogObservationContext | null>;
+
+export interface DiraMcpServerOptions {
+  /**
+   * Who the tools act as. Defaults to resolveTeacherContext() (signed-in teacher,
+   * else the demo teacher). The HTTP route passes a fixed teacher when the caller
+   * presents a per-teacher MCP token; the profile agent passes its own teacher.
+   */
+  resolveContext?: TeacherContextResolver;
+  /** Run ID shared with in-process callers, so their tool events join one run log. */
+  runId?: string;
+}
+
+/**
+ * DIRA's own MCP server. No tool here can approve anything on a teacher's behalf:
+ * accepting a test and approving a signed summary are teacher-only actions in the UI.
+ */
+export function createDiraMcpServer(options: DiraMcpServerOptions = {}): McpServer {
+  const resolveContext: TeacherContextResolver =
+    options.resolveContext ?? (() => resolveTeacherContext());
   const server = new McpServer(
-    { name: "dira", version: "1.0.0" },
+    { name: "dira", version: "1.1.0" },
     { capabilities: {} },
   );
 
-  registerSuggestionWorkflowTools(server, async () => resolveTeacherContext());
+  registerSuggestionWorkflowTools(server, resolveContext, options.runId);
 
   server.registerTool(
     "prepare_daily_follow_up_queue",
@@ -181,7 +205,7 @@ export function createDiraMcpServer(): McpServer {
     async () => {
       let stage = "teacher_context_resolution";
       try {
-        const context = await resolveTeacherContext();
+        const context = await resolveContext();
         if (!context) {
           return toolError("teacher_context_unavailable", "The demo teacher context is unavailable.");
         }
@@ -232,7 +256,7 @@ export function createDiraMcpServer(): McpServer {
     },
     async ({ limit }) => {
       try {
-        const context = await resolveTeacherContext();
+        const context = await resolveContext();
         if (!context) {
           return toolError("teacher_context_unavailable", "The demo teacher context is unavailable.");
         }
@@ -270,7 +294,7 @@ export function createDiraMcpServer(): McpServer {
       }
 
       try {
-        const context = await resolveTeacherContext();
+        const context = await resolveContext();
         if (!context) {
           return toolError("teacher_context_unavailable", "The demo teacher context is unavailable.");
         }
@@ -305,7 +329,7 @@ export function createDiraMcpServer(): McpServer {
     },
     async (input) => {
       try {
-        const context = await resolveTeacherContext();
+        const context = await resolveContext();
         if (!context) {
           return toolError("teacher_context_unavailable", "The demo teacher context is unavailable.");
         }
@@ -344,7 +368,7 @@ export function createDiraMcpServer(): McpServer {
     },
     async ({ learner_id }) => {
       try {
-        const context = await resolveTeacherContext();
+        const context = await resolveContext();
         if (!context) {
           return toolError("teacher_context_unavailable", "The teacher context is unavailable.");
         }
@@ -369,7 +393,7 @@ export function createDiraMcpServer(): McpServer {
     },
     async ({ learner_id, submission_id }) => {
       try {
-        const context = await resolveTeacherContext();
+        const context = await resolveContext();
         if (!context) {
           return toolError("teacher_context_unavailable", "The teacher context is unavailable.");
         }
@@ -398,7 +422,7 @@ export function createDiraMcpServer(): McpServer {
     },
     async ({ learner_id, submission_id, proposal_id, supersedes_test_id }) => {
       try {
-        const context = await resolveTeacherContext();
+        const context = await resolveContext();
         if (!context) {
           return toolError("teacher_context_unavailable", "The teacher context is unavailable.");
         }
@@ -414,37 +438,6 @@ export function createDiraMcpServer(): McpServer {
           return toolError("suggestion_rejected", error.message);
         }
         return toolError("suggestion_regeneration_failed", "Dira could not regenerate this suggestion.");
-      }
-    },
-  );
-
-  server.registerTool(
-    "accept_suggested_test",
-    {
-      title: "Accept a proposed learner activity",
-      description:
-        "Save a proposed classroom test as ACCEPTED for an explicitly selected learner. A teacher-recorded linked outcome is required before it can become COMPLETED.",
-      inputSchema: {
-        learner_id: z.string().trim().min(1).max(200),
-        submission_id: z.string().trim().min(1).max(200),
-        proposal_id: z.string().regex(/^[a-f0-9]{64}$/),
-        planned_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-        supersedes_test_id: z.string().trim().min(1).max(200).optional(),
-      },
-    },
-    async (input) => {
-      try {
-        const context = await resolveTeacherContext();
-        if (!context) {
-          return toolError("teacher_context_unavailable", "The teacher context is unavailable.");
-        }
-        return toolResult(await acceptSuggestion(input, context));
-      } catch (error) {
-        logToolFailure("accept_suggested_test", error);
-        if (error instanceof SuggestionPersistenceError) {
-          return toolError("suggestion_acceptance_rejected", error.message);
-        }
-        return toolError("suggestion_acceptance_failed", "Dira could not save the accepted test.");
       }
     },
   );
@@ -478,6 +471,117 @@ export function createDiraMcpServer(): McpServer {
           return toolError("draft_save_rejected", error.message);
         }
         return toolError("draft_save_failed", "Dira could not save the observation drafts.");
+      }
+    },
+  );
+
+  server.registerTool(
+    "check_evidence_readiness",
+    {
+      title: "Check what a learner's evidence supports",
+      description:
+        "Deterministic, read-only check for one learner the teacher currently teaches: observation counts across years, whether an under-corroborated repeated signal can be explored with a small test, completed tests still needing a hypothesis assessment, the signed-summary evidence gate, and the actions the evidence currently allows. Call this before and after acting.",
+      inputSchema: {
+        learner_id: z.string().trim().min(1).max(200),
+      },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ learner_id }) => {
+      try {
+        const context = await resolveContext();
+        if (!context) {
+          return toolError("teacher_context_unavailable", "The teacher context is unavailable.");
+        }
+        return toolResult(await assessEvidenceReadiness(learner_id, context));
+      } catch (error) {
+        logToolFailure("check_evidence_readiness", error);
+        if (error instanceof EvidenceSummaryNotFoundError) {
+          return toolError("learner_not_found", "The learner is not currently assigned to this teacher.");
+        }
+        return toolError("readiness_check_failed", "Dira could not check this learner's evidence.");
+      }
+    },
+  );
+
+  server.registerTool(
+    "assess_test_outcome",
+    {
+      title: "Assess a completed test against its hypothesis",
+      description:
+        "For a COMPLETED classroom test with a teacher-recorded outcome, classify how the outcome relates to the hypothesis (SUPPORTS, MIXED, CONTRADICTS or INSUFFICIENT_EVIDENCE) with cited evidence, and save it as a new versioned assessment. Never labels the learner.",
+      inputSchema: {
+        learner_id: z.string().trim().min(1).max(200),
+        test_id: z.string().trim().min(1).max(200),
+      },
+    },
+    async ({ learner_id, test_id }) => {
+      try {
+        const context = await resolveContext();
+        if (!context) {
+          return toolError("teacher_context_unavailable", "The teacher context is unavailable.");
+        }
+        const result = await assessHypothesis(learner_id, test_id, context);
+        if (result.status === "not_assessable_yet") {
+          return toolResult(result);
+        }
+        return toolResult({
+          status: result.status,
+          retrieval_status: result.retrieval_status,
+          assessment: {
+            assessment_id: result.assessment.assessment_id,
+            test_id: result.assessment.test_id,
+            version: result.assessment.version,
+            classification: result.assessment.classification,
+            rationale: result.assessment.rationale,
+            evidence_references: result.assessment.evidence_references,
+          },
+        });
+      } catch (error) {
+        logToolFailure("assess_test_outcome", error);
+        if (error instanceof EvidenceReasoningError) {
+          return toolError(error.code.toLowerCase(), error.message);
+        }
+        return toolError("assessment_failed", "Dira could not assess this test outcome.");
+      }
+    },
+  );
+
+  server.registerTool(
+    "draft_signed_summary",
+    {
+      title: "Draft an evidence summary for a teacher to sign",
+      description:
+        "Only when the deterministic evidence gate is met (reviewed observations from 2+ teachers across 2+ terms and 1+ completed test): draft a short plain-language note where every sentence cites evidence, for the teacher to use when talking with the guardian. Saves a DRAFT only. A named teacher must approve it in DIRA; it is never sent anywhere automatically.",
+      inputSchema: {
+        learner_id: z.string().trim().min(1).max(200),
+      },
+    },
+    async ({ learner_id }) => {
+      try {
+        const context = await resolveContext();
+        if (!context) {
+          return toolError("teacher_context_unavailable", "The teacher context is unavailable.");
+        }
+        const result = await draftSignedSummary(learner_id, context, { runId: options.runId });
+        if (!result.ok) return toolResult(result);
+        return toolResult({
+          ok: true,
+          status: "drafted",
+          duplicate: result.duplicate,
+          note_id: result.note.note_id,
+          note_status: result.note.status,
+          sentences: result.note.sentences,
+          requires_teacher_approval: true,
+        });
+      } catch (error) {
+        logToolFailure("draft_signed_summary", error);
+        if (error instanceof SignedSummaryError) {
+          return toolError(error.code, error.message);
+        }
+        if (error instanceof EvidenceSummaryNotFoundError) {
+          return toolError("learner_not_found", "The learner is not currently assigned to this teacher.");
+        }
+        return toolError("signed_summary_failed", "Dira could not draft a summary to sign.");
       }
     },
   );

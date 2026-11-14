@@ -1,116 +1,48 @@
-# Dira - Architecture Summary
+# DIRA: Architecture (one page)
 
-> **Status:** High-level architecture overview. Detailed system design, flows, data models, and guardrails live in [`SYSTEM_ARCHITECTURE.md`](./SYSTEM_ARCHITECTURE.md).
->
-> **Audience:** Developers, reviewers, and stakeholders who need the essential technical picture.
-
-## 1. System Overview
-
-Dira helps teachers collect observations, explore questions via small classroom tests, and review an evidence-grounded Learner Evidence Card. The agent recommends; the teacher decides.
-
-## 2. Technology Stack
-
-| Layer | Technology | Provider |
-|---|---|---|
-| Frontend | Next.js App Router + React + TypeScript | Dira code |
-| Orchestration | LangGraph.js (open-source) | Dira code |
-| LLM | GLM-5.3 Flash (open-weight model) | Hosted Z.AI API |
-| Transcription | OpenAI Audio Transcriptions (frontier model) | Hosted API (MVP — replace with self-hosted open-weight before go-live) |
-| SMS / Voice | Africa's Talking | Hosted API |
-| Database | PostgreSQL | Dira data store |
-| Calendar | Keeper.sh (MCP) | Borrowed MCP server |
-
-## 3. Agent Architecture and Workflow
+DIRA follows one learner across years. Teachers log what they notice (a phone call after class, or chat); an agent keeps the learner's profile current, proposes small classroom tests to check a hunch, and, once the evidence is strong enough, drafts a cited note a teacher can use with the family. **The agent recommends; a named teacher decides.** Details: [`SYSTEM_ARCHITECTURE.md`](./SYSTEM_ARCHITECTURE.md); roadmap: [`DIRA_HUB_ROADMAP.md`](./DIRA_HUB_ROADMAP.md).
 
 ```
-Teacher action -> App Router -> LangGraph.js workflow -> [MCP tools] -> GLM-5.3 -> [MCP tools] -> PostgreSQL
+Teacher (call / chat / UI) ──► Next.js App Router ──► services + PostgreSQL (system of record)
+                                     │
+            profile-update agent (GLM plans tool use, code guards every action)
+                                     │  MCP (in-process, official SDK)
+                    DIRA MCP server: 15 tools ──► Suggest Test graph (LangGraph.js)
+                                     │                 └─► Fetch MCP gateway (borrowed) ──► AMI, WWC
+                    GLM-5.3 Flash (Z.AI) or self-hosted open-weights model via lib/models.ts
 ```
 
-- **Orchestrator** (`lib/agent/orchestrator.ts`) coordinates bounded, scheduled follow-up work.
-- **Suggest Test graph** (`lib/agent/suggest-test-graph.ts`) runs in the request path:
-  1. Retrieve authorized learner evidence and test history (Dira MCP tools)
-  2. Retrieve bounded educational resources (Dira MCP tool → external retrieval adapter)
-  3. Prepare cited context → send to GLM-5.3 via `lib/models.ts`
-  4. Validate structured output (deterministic checks + one retry)
-  5. Persist validated suggestion (Dira MCP tool) → PostgreSQL
-- Nodes communicate via the **MCP SDK in-process transport** — not recursive HTTP calls.
-
-## 4.MCP Servers and External Integrations: built vs borrowed
-
-### DIRA MCP Server
-
-Dira owns 13 MCP tools served by a single in-process MCP server (`lib/mcp-tools/dira-server.ts`):
-
-| Tool | Purpose |
+## Stack
+| Layer | Choice |
 |---|---|
-| `log_observation` | Validate and persist teacher observations with provenance |
-| `suggest_test` | Start the LangGraph.js Suggest Test workflow |
-| `get_learner_observations` | Retrieve authorized evidence for a learner |
-| `get_previous_suggestions` | Retrieve past test suggestions and outcomes |
-| `retrieve_education_resources` | Discover bounded, relevance-ranked excerpts from approved education domains |
-| `persist_test_suggestion` | Save a validated SUGGESTED test proposal |
-| `build_evidence_summary` | Assemble a ground ed Evidence Card summary |
-| `prepare_daily_follow_up_queue` | Queue follow-up work for a teacher's learners |
-| `list_due_follow_ups` | Fetch due follow-up items |
-| `dispatch_one_due_follow_up` | Dispatch one scheduled follow-up item |
-| `draft_pathway_note` | Evidence summary and hypothesis assessment (read-only — does not assign pathways) |
-| *(+ see server for remaining tools)* | |
+| App | Next.js 16 App Router, React 19, TypeScript, Zod |
+| Orchestration | Open source: LangGraph.js (Suggest Test graph) and a bounded tool-calling loop (profile-update agent) |
+| Model | GLM-5.3 Flash (Z.AI) by default; any OpenAI-compatible **self-hosted open-weights** server via `DIRA_MODEL_BASE_URL` |
+| Data | PostgreSQL; tracked migrations (`npm run db:migrate`) |
+| Voice | Africa's Talking (calls), OpenAI transcription (documented temporary exception) |
 
-**Why built:** These encapsulate Dira's core domain logic — observation persistence, evidence retrieval, test suggestion, and evidence summarization. They enforce validation, safety constraints, and teacher authorization at the tool boundary.
+## The agent (genuinely agentic, bounded by code)
+`lib/agent/profile-update-agent.ts`. Triggered on demand or after a confirmed observation or recorded test outcome. GLM decides which tools to call and when to stop:
+1. `check_evidence_readiness` (deterministic): what the evidence across all years allows.
+2. Act: `assess_test_outcome`, `suggest_test` or `draft_signed_summary`.
+3. Re-check after every action; recover from tool errors or blocks; summarise for the teacher.
 
-### External MCP Server: Keeper.sh
+Guards in code, not prompts: no action before a fresh readiness check; actions blocked unless readiness allows them (blocks logged and explained to the model); `learner_id`/`submission_id` injected and hidden from the model; limits of 6 turns, 10 calls and per-tool caps. **No tool can accept, approve, share or send anything.**
 
-| Server | URL | Why borrowed |
-|---|---|---|
-| Keeper.sh | `https://www.keeper.sh/mcp` | Single MCP interface for Google Calendar, Outlook/Microsoft 365, iCloud, Fastmail, CalDAV, and read-only ICS/iCal feeds |
+## MCP
+- **Own server** (`/api/mcp/server`, 15 tools, ≥3 that take action): observations, evidence card, readiness, Suggest Test (+ persist/regenerate), hypothesis assessment, signed-summary drafts, call drafts, follow-up queue. Per-teacher hashed, revocable tokens pin each caller to one teacher and school, so a school's own system can reuse the tools.
+- **Borrowed server: Fetch MCP** (`mcp-server-fetch`, the maintained reference fetch server) behind our authenticated gateway (`fetch-mcp-server/`, Railway) with a domain allowlist and size/time limits. Chosen so we did not write a scraper. IB and EEF block automated requests, so live sources default to AMI and WWC.
+- **Planned:** Keeper.sh calendar MCP for individual teachers (client foundation only).
 
-**Why borrowed:** Rather than implementing and maintaining separate calendar-provider adapters, Dira uses Keeper.sh as a unified, MCP-compliant gateway. Calendar data is timing context only — it never proves a lesson happened or a learner attended.
+## Safety and governance
+- **Evidence before conclusions:** every suggestion, assessment and note cites stored evidence IDs; unknown IDs fail validation. One correction attempt, then fail closed (nothing saved).
+- **No labels:** a language guard rejects labels, diagnoses and pathway verdicts in model output and teacher edits.
+- **Human gate:** the Evidence Card ends with a signed evidence summary, built from the card's cited evidence. It is created as a DRAFT. Approval requires a teacher signed in by name (`getSignedInTeacher`, never the demo fallback) who currently teaches the learner; approver, time and exact text are recorded. Nothing is sent to a guardian by DIRA.
+- **The long view:** a teacher who currently teaches a learner sees that learner's full history at the same school (every year and class). History at a previous school stays there unless a guardian approves an export.
+- **Logged runs:** every model call, tool proposal, block and result is written to `agent_activity_logs` under one run ID with tokens and cost; `/agent-logs?run_id=…` shows the timeline and model cost per run. No chain-of-thought is stored.
 
-### External APIs
+## Data
+PostgreSQL holds schools, teachers, classes, learners and enrolments across years, timetable, the school calendar, observations (originals never overwritten; reviews versioned), activity tests with lineage, versioned hypothesis assessments, signed summaries, focus assignments, call jobs/recordings and agent logs. Synthetic data only.
 
-| Service | Why not MCP | Integration |
-|---|---|---|
-| GLM-5.3 API | Hosted model API, not an MCP server | Direct API call via `lib/models.ts` abstraction |
-| OpenAI STT | Hosted transcription API, not an MCP server | Direct API call for MVP — replace before go-live |
-| Africa's Talking SMS/Voice | Hosted communication APIs, not MCP servers | Direct API calls for reminders and follow-up calls |
-
-> **Key principle:** An external API is not automatically an MCP server. Dira connects to Keeper.sh through the MCP protocol. All other external services are integrated via direct API calls.
-
-## 5. MCP Client and Tool Communication
-
-`lib/agent/mcp-client.ts` provides:
-
-- Streamable HTTP transport through the official MCP SDK
-- OAuth provider injection
-- Tool discovery and invocation
-- Request timeouts and error propagation
-- Tracing and logging (without chain-of-thought)
-
-The client connects to both Dira's own in-process MCP server (for Dira tools) and the remote Keeper.sh server (for calendar integration).
-
-## 6. Language Model Abstraction
-
-`lib/models.ts` keeps the GLM-5.3 provider/model configuration replaceable and server-side. No model keys are exposed in client components. The abstraction allows swapping providers without changing agent orchestration code.
-
-## 7. Database and Data Management
-
-PostgreSQL is the system of record for:
-
-- Learners, observations, questions, tests, outcomes, and evidence references
-- Versioned hypothesis assessments (`hypothesis_assessments` table)
-- Follow-up queue jobs (`teacher_follow_up_jobs` table)
-- School calendar and attendance contexts
-
-See [`SYSTEM_ARCHITECTURE.md`](./SYSTEM_ARCHITECTURE.md) for the full entity-relationship diagram.
-
-## 8. Guardrails/ Safety, Evidence, and Governance
-
-- **No learner classification:** observations are factual records; evidence summaries are grounded and validated, never diagnoses or pathway assignments.
-- **Evidence before conclusions:** every factual claim in a summary is traceable to source records.
-- **Teacher decides:** the agent suggests activities; teachers accept, reject, or request alternatives.
-- **Source integrity:** external educational guidance is context only, cited only when retrieved within a strict timeout.
-- **Secrets stay server-side:** no API keys in client code or environment files committed to git.
-
-## 9. Further Documentation
-
-See [SYSTEM_ARCHITECTURE.md](./SYSTEM_ARCHITECTURE.md) for the full end-to-end journey, architecture diagrams, guardrail details, repository map, and evaluation expectations.
+## Verification
+`npm run test:unit` (unit and in-memory PostgreSQL tests with the real migrations), `npm run test:gateway`, `npm run build`, CI on every push, and `npm run eval` (live model, repeated runs). See [`EVALS.md`](./EVALS.md) for results and the unfixed failure.

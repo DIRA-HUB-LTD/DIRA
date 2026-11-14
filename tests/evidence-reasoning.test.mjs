@@ -21,21 +21,26 @@ vi.mock("@/lib/services/evidence-summary", () => ({
   buildEvidenceSummary: mocks.buildEvidenceSummary,
   EvidenceSummaryNotFoundError: class EvidenceSummaryNotFoundError extends Error {},
 }));
-vi.mock("@/lib/services/education-retrieval", () => ({
-  EDUCATION_SOURCES: [{
+vi.mock("@/lib/services/education-retrieval", () => {
+  const sources = [{
     key: "EEF",
     name: "Education Endowment Foundation",
     url: "https://educationendowmentfoundation.org.uk/",
     domain: "educationendowmentfoundation.org.uk",
-  }],
-  retrieveEducationEvidence: mocks.retrieveEducationEvidence,
-}));
-vi.mock("@/lib/db/client", () => ({
-  pool: {
+  }];
+  return {
+    EDUCATION_SOURCES: sources,
+    activeEducationSources: () => sources,
+    retrieveEducationEvidence: mocks.retrieveEducationEvidence,
+  };
+});
+vi.mock("@/lib/db/client", () => {
+  const pool = {
     query: mocks.poolQuery,
     connect: mocks.poolConnect,
-  },
-}));
+  };
+  return { pool, getPool: () => pool };
+});
 vi.mock("@/lib/agent/logger", () => ({
   createRunId: () => "11111111-1111-4111-8111-111111111111",
   logToolEvent: mocks.logToolEvent,

@@ -8,7 +8,10 @@ const testDoubles = vi.hoisted(() => ({
   },
 }));
 
-vi.mock("@/lib/db/client", () => ({ pool: testDoubles.pool }));
+vi.mock("@/lib/db/client", () => ({
+  pool: testDoubles.pool,
+  getPool: () => testDoubles.pool,
+}));
 vi.mock("@/lib/agent/logger", () => testDoubles.logger);
 
 import {

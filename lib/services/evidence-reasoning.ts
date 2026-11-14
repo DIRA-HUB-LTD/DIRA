@@ -14,6 +14,7 @@ import {
 } from "@/lib/models";
 import type { SuggestTestContext } from "@/lib/mcp-tools/suggestTest";
 import {
+  activeEducationSources,
   EDUCATION_SOURCES,
   retrieveEducationEvidence,
   type EducationRetrievalStatus,
@@ -868,7 +869,7 @@ async function assessHypothesisOnce(
     try {
       const retrieval = await retrieveEducationEvidence(
         `${test.hypothesis} ${test.exploration_question ?? ""} ${test.suggested_activity}`,
-        EDUCATION_SOURCES,
+        activeEducationSources(),
         { runId, workflow: "hypothesis_assessment" },
       );
       retrievalStatus = retrieval.status;

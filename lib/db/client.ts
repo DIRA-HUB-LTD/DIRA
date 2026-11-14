@@ -6,6 +6,13 @@ let pool: Pool | null = null;
 
 // Export a function that creates/gets the pool only when called
 export const getPool = (): Pool => {
+  // Test-only seam for the eval harness and in-memory database tests. Ignored
+  // outside NODE_ENV=test (Vitest sets it), so it cannot affect dev or production.
+  if (process.env.NODE_ENV === "test") {
+    const testPool = (globalThis as typeof globalThis & { __diraTestPool?: Pool }).__diraTestPool;
+    if (testPool) return testPool;
+  }
+
   if (pool) return pool;
 
   const connectionString = process.env.DATABASE_URL;
@@ -27,4 +34,3 @@ export const getPool = (): Pool => {
 
   return pool;
 };
-

@@ -1,6 +1,8 @@
 import { connection } from "next/server";
 import Card from "@/components/ui/Card";
 import EvidenceReasoning from "@/components/evidence/EvidenceReasoning";
+import SignedSummarySection from "@/components/evidence/SignedSummarySection";
+import ProfileAgentPanel from "@/components/evidence/ProfileAgentPanel";
 import { resolveTeacherContext } from "@/lib/auth/teacher-context";
 import { buildEvidenceSummary } from "@/lib/services/evidence-summary";
 import { loadCurrentAssessments } from "@/lib/services/evidence-reasoning";
@@ -66,7 +68,10 @@ export default async function EvidencePage({
             ...test,
             assessment: assessmentByTestId.get(test.test_id) ?? null,
           }))}
-        />
+        >
+          <SignedSummarySection learnerId={learnerId} />
+        </EvidenceReasoning>
+        <ProfileAgentPanel learnerId={learnerId} />
       </main>
     );
   } catch (error) {
