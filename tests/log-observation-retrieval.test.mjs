@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("../lib/db/client.ts", () => ({
   pool: { query: mocks.query },
+  getPool: () => ({ query: mocks.query }),
 }));
 
 vi.mock("../lib/auth/teacher-context.ts", () => ({

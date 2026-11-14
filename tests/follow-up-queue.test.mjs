@@ -15,7 +15,8 @@ vi.mock("../lib/external-mcp/voice.ts", () => ({
   initiateAfricaTalkingCall: provider.initiateAfricaTalkingCall,
 }));
 
-const { pool } = await import("../lib/db/client.ts");
+const { getPool } = await import("../lib/db/client.ts");
+const pool = getPool();
 const { dispatchOneDueFollowUp } = await import(
   "../lib/services/follow-up-dispatch.ts"
 );

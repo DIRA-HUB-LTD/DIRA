@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 // Vercel runs `vercel-build` instead of `build` when it exists.
 // 1. Bring the database up to date (additive, idempotent migrations tracked in
 //    schema_migrations). If a migration fails, the build fails and Vercel keeps
