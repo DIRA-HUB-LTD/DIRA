@@ -28,7 +28,7 @@ describe("public Dira MCP tool inventory", () => {
         "build_evidence_summary",
         "check_evidence_readiness",
         "dispatch_one_due_follow_up",
-        "draft_pathway_note",
+        "draft_signed_summary",
         "get_learner_observations",
         "get_previous_suggestions",
         "list_due_follow_ups",

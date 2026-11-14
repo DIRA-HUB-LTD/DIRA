@@ -8,7 +8,7 @@ interface Me {
   sign_in_configured: boolean;
 }
 
-/** Shows who is signed in. Named sign-in is required to approve pathway notes. */
+/** Shows who is signed in. Named sign-in is required to approve signed summaries. */
 export default function SignInStatus({ compact = false }: { compact?: boolean }) {
   const [me, setMe] = useState<Me | null>(null);
 

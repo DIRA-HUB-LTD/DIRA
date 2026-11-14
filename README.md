@@ -90,8 +90,8 @@ learners operate the software.
 |---|---|
 | Learner list and learner record | Implemented; the record shows the learner's full history at this school across academic years. |
 | Fortnightly focus list | Each teacher gets up to 10 learners from their own classes for a fixed 14-day period (unobserved this year first). Stored, so it does not reshuffle mid-fortnight. |
-| Profile-update agent | GLM plans which DIRA MCP tools to call for one learner (check readiness, assess a completed test, suggest a test, draft a pathway note), re-checks after each action, and stops. Code blocks actions the evidence does not allow. Run from the evidence page, or automatically with `DIRA_PROFILE_AGENT_AUTO=true`. |
-| Early pathway note (sub-theme) | Drafted only when a deterministic gate is met (reviewed evidence from 2+ teachers, 2+ terms, 1+ completed test). Every sentence cites evidence; labels are rejected. A **named, signed-in teacher** must approve; DIRA never sends it. |
+| Profile-update agent | GLM plans which DIRA MCP tools to call for one learner (check readiness, assess a completed test, suggest a test, draft a summary to sign), re-checks after each action, and stops. Code blocks actions the evidence does not allow. Run from the evidence page, or automatically with `DIRA_PROFILE_AGENT_AUTO=true`. |
+| Signed evidence summary (sub-theme) | The last section of the Evidence Card, not a separate document. Once a deterministic gate is met (reviewed evidence from 2+ teachers, 2+ terms, 1+ completed test), the card's cited evidence can be drafted into a short summary for a family conversation. Every sentence cites evidence; labels are rejected. A **named, signed-in teacher** edits and signs it; DIRA never sends it. |
 | Teacher sign-in (pilot) | Teacher ID + PIN, signed HttpOnly session. Required for approvals. Phone OTP is the planned replacement. |
 | Typed observation capture | Implemented through the learner's Log Observation screen and persisted to PostgreSQL. |
 | Observation review | Review controls are available for records marked as awaiting teacher review. |
@@ -277,9 +277,9 @@ every call to that teacher and school, or with the shared demo token.
 | `retrieve_education_resources` | Bounded query; no learner ID or raw observation text | Returns an overall retrieval status and one result/status per IB, EEF, AMI, and WWC source, including retrieved URLs/excerpts or bounded error details. |
 | `persist_test_suggestion` | Learner ID, validated suggestion, submission ID, optional superseded test ID | Revalidates and saves one idempotent `SUGGESTED` activity and its evidence links. |
 | `regenerate_test_suggestion` | Learner ID, prior proposal ID, submission ID, optional superseded test ID | Validates the saved proposal, reruns the workflow with history, and saves a linked replacement. |
-| `check_evidence_readiness` | Learner ID | Deterministic, read-only: observation counts across years, whether a small test is warranted, completed tests awaiting assessment, the pathway-note gate, and the actions the evidence allows. |
+| `check_evidence_readiness` | Learner ID | Deterministic, read-only: observation counts across years, whether a small test is warranted, completed tests awaiting assessment, the signed-summary gate, and the actions the evidence allows. |
 | `assess_test_outcome` | Learner ID, test ID | For a completed test with a recorded outcome, classifies SUPPORTS / MIXED / CONTRADICTS / INSUFFICIENT_EVIDENCE with cited evidence and saves a new versioned assessment. |
-| `draft_pathway_note` | Learner ID | Only when the evidence gate is met: saves a fully cited DRAFT note for teacher review. Never approves or sends. |
+| `draft_signed_summary` | Learner ID | Only when the evidence gate is met: saves a fully cited DRAFT summary for a teacher to sign. Never signs or sends. |
 | `build_evidence_summary` | Learner ID | Returns saved tests, linked evidence, retrieval outcomes, and teacher-recorded outcomes for the Evidence Card. |
 | `prepare_daily_follow_up_queue` | No caller-supplied teacher identity | Idempotently creates eligible queue jobs for the server-resolved demo teacher; does not place calls. |
 | `list_due_follow_ups` | Optional bounded result limit | Returns due queued jobs for the server-resolved demo teacher. |
@@ -290,7 +290,7 @@ Tool schemas validate inputs before business logic. Tools return structured
 results/errors and do not report a write as successful before persistence is
 confirmed. The caller cannot supply its own teacher or school identity: it comes
 from the token (or, for the shared demo token, the signed-in or demo teacher).
-Accepting a test and approving a pathway note are teacher-only actions in the UI;
+Accepting a test and signing an evidence summary are teacher-only actions in the UI;
 `accept_suggested_test` was removed from MCP so no agent can accept on a
 teacher's behalf.
 
@@ -495,7 +495,7 @@ npm run fetch:diagnose   # checks the deployed Fetch MCP path step by step
 
 `npm run test:unit` uses PGlite (PostgreSQL compiled to WebAssembly) with the
 real migrations, so database logic such as cross-year visibility, the focus list,
-pathway-note approval and MCP tokens is tested against real SQL. GitHub Actions
+signed-summary approval and MCP tokens is tested against real SQL. GitHub Actions
 runs these on every push (`.github/workflows/ci.yml`).
 
 `npm run test:suggest-test` covers the focused Suggest Test/evidence reasoning
@@ -547,7 +547,7 @@ We would rather you hear this from us:
 - **Live evals not yet recorded.** The harness (`npm run eval`) is built and
   self-checked, but results only count once run against the real model; see
   [`EVALS.md`](./EVALS.md). One task is a documented, unfixed failure
-  (paraphrased duplicate observations inflate the pathway gate).
+  (paraphrased duplicate observations inflate the summary gate).
 - **Open-weights run not yet recorded.** The model can be switched to a
   self-hosted open-weights server, but the run log for a full task on one has
   not been captured yet.

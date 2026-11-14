@@ -31,7 +31,7 @@ function fakeSession({ readinessSequence, failures = {} }) {
         { name: "check_evidence_readiness", inputSchema: schema(["learner_id"]) },
         { name: "suggest_test", inputSchema: schema(["learner_id", "submission_id"]) },
         { name: "assess_test_outcome", inputSchema: schema(["learner_id", "test_id"]) },
-        { name: "draft_pathway_note", inputSchema: schema(["learner_id"]) },
+        { name: "draft_signed_summary", inputSchema: schema(["learner_id"]) },
         { name: "get_learner_observations", inputSchema: schema(["learner_id"]) },
         { name: "log_observation", inputSchema: schema(["learner_id", "content"]) },
       ];
@@ -51,7 +51,7 @@ function fakeSession({ readinessSequence, failures = {} }) {
         const value = { status: "assessed", assessment: { test_id: args.test_id, classification: "SUPPORTS" } };
         return { structuredContent: value, content: [{ type: "text", text: JSON.stringify(value) }] };
       }
-      if (name === "draft_pathway_note") {
+      if (name === "draft_signed_summary") {
         const value = { ok: true, status: "drafted", note_id: "n1" };
         return { structuredContent: value, content: [{ type: "text", text: JSON.stringify(value) }] };
       }
@@ -87,7 +87,7 @@ const READY_TO_ASSESS = {
   available_actions: ["assess_test_outcome"],
   tests_needing_assessment: ["TEST-DONE"],
 };
-const READY_TO_DRAFT = { available_actions: ["draft_pathway_note"], tests_needing_assessment: [] };
+const READY_TO_DRAFT = { available_actions: ["draft_signed_summary"], tests_needing_assessment: [] };
 const NOTHING = { available_actions: ["wait_for_more_evidence"], tests_needing_assessment: [] };
 
 beforeEach(() => {
@@ -101,8 +101,8 @@ describe("profile-update agent", () => {
       turn(toolCall("check_evidence_readiness")),
       turn(toolCall("assess_test_outcome", { test_id: "TEST-DONE" })),
       turn(toolCall("check_evidence_readiness")),
-      turn(toolCall("draft_pathway_note")),
-      finish("I assessed the completed test and drafted a pathway note for you to review."),
+      turn(toolCall("draft_signed_summary")),
+      finish("I assessed the completed test and drafted a summary for you to sign for you to review."),
     ]);
     const result = await runProfileUpdateAgent("L1", CONTEXT, { deps: { session, complete } });
     expect(result.status).toBe("completed");
@@ -110,9 +110,9 @@ describe("profile-update agent", () => {
       ["check_evidence_readiness", "success"],
       ["assess_test_outcome", "success"],
       ["check_evidence_readiness", "success"],
-      ["draft_pathway_note", "success"],
+      ["draft_signed_summary", "success"],
     ]);
-    expect(result.summary).toMatch(/drafted a pathway note/);
+    expect(result.summary).toMatch(/drafted a summary for you to sign/);
     expect(session.close).toHaveBeenCalled();
     expect(logged.at(-1)).toMatchObject({ event_type: "run_finished", status: "success" });
   });
@@ -120,15 +120,15 @@ describe("profile-update agent", () => {
   it("blocks an action before readiness is checked, and the model recovers", async () => {
     const session = fakeSession({ readinessSequence: [READY_TO_DRAFT, NOTHING] });
     const { complete, seen } = scriptedModel([
-      turn(toolCall("draft_pathway_note")),
+      turn(toolCall("draft_signed_summary")),
       turn(toolCall("check_evidence_readiness")),
-      turn(toolCall("draft_pathway_note")),
+      turn(toolCall("draft_signed_summary")),
       finish("Drafted after checking."),
     ]);
     const result = await runProfileUpdateAgent("L1", CONTEXT, { deps: { session, complete } });
-    expect(result.actions[0]).toMatchObject({ tool: "draft_pathway_note", status: "blocked" });
+    expect(result.actions[0]).toMatchObject({ tool: "draft_signed_summary", status: "blocked" });
     expect(seen[1].messages.at(-1).content).toMatch(/^BLOCKED: Call check_evidence_readiness first/);
-    expect(result.actions.at(-1)).toMatchObject({ tool: "draft_pathway_note", status: "success" });
+    expect(result.actions.at(-1)).toMatchObject({ tool: "draft_signed_summary", status: "success" });
     expect(result.status).toBe("partial");
     expect(logged.some((event) => event.event_type === "tool_blocked")).toBe(true);
   });
@@ -137,12 +137,12 @@ describe("profile-update agent", () => {
     const session = fakeSession({ readinessSequence: [READY_TO_ASSESS] });
     const { complete } = scriptedModel([
       turn(toolCall("check_evidence_readiness")),
-      turn(toolCall("assess_test_outcome", { test_id: "TEST-DONE" }), toolCall("draft_pathway_note")),
+      turn(toolCall("assess_test_outcome", { test_id: "TEST-DONE" }), toolCall("draft_signed_summary")),
       finish("Stopped."),
     ]);
     const result = await runProfileUpdateAgent("L1", CONTEXT, { deps: { session, complete } });
-    expect(result.actions[2]).toMatchObject({ tool: "draft_pathway_note", status: "blocked" });
-    expect(session.calls.map((call) => call.name)).not.toContain("draft_pathway_note");
+    expect(result.actions[2]).toMatchObject({ tool: "draft_signed_summary", status: "blocked" });
+    expect(session.calls.map((call) => call.name)).not.toContain("draft_signed_summary");
   });
 
   it("refuses actions the evidence does not allow, and unknown tests", async () => {
@@ -150,7 +150,7 @@ describe("profile-update agent", () => {
     const { complete } = scriptedModel([
       turn(toolCall("check_evidence_readiness")),
       turn(
-        toolCall("draft_pathway_note"),
+        toolCall("draft_signed_summary"),
         toolCall("suggest_test"),
         toolCall("assess_test_outcome", { test_id: "TEST-INVENTED" }),
       ),

@@ -2,6 +2,8 @@
 
 > **Current flow authority:** `ARCHITECTURE_Dira_Revised.md`. The shared planning PDF contains an older pathway-note/approval/guardian sequence. That sequence is superseded for this MVP. The current end state is a teacher-facing Learner Evidence Card and the teacher deciding what to explore next.
 >
+> **Decision update (14 Nov 2026, founder):** the card gains one closing step, the **signed evidence summary**. When a deterministic evidence gate is met (2+ teachers, 2+ terms, 1+ completed test), the agent may draft a short, fully cited summary of the card's evidence for a family conversation. A named, signed-in teacher edits and signs it. It is stored in `signed_summaries` (`DRAFT` → `APPROVED` or `DISCARDED`). There is still **no** `SHARED_WITH_GUARDIAN` state, no delivery and no guardian approval: DIRA never sends it, and it never states a pathway, label or verdict. The old `teacher_reviews` tables and the `approve-note` stub stay deprecated.
+>
 > **Implementation boundary:** The flows describe the intended teacher experience, not production authentication. Current server-side flows resolve a single demo teacher from PostgreSQL; the shared MCP bearer token does not authenticate an individual teacher. The Keeper calendar flow below is planned and is not currently connected to follow-up execution.
 
 ## 1. Main journey
@@ -145,7 +147,7 @@ A test with no linked, teacher-recorded outcome remains open even if accepted.
 5. Validate that all claims are factual, appropriately scoped to the visible time range, and supported by record IDs.
 6. Render the **Learner Evidence Card** for the teacher.
 
-The card is not a pathway recommendation and has no required guardian delivery or pathway-note approval flow in the current MVP.
+The card is not a pathway recommendation and has no guardian delivery. Its final section, **Sign this summary**, is described in the decision update at the top of this file.
 
 ## 9. Flow H — Calendar-aware follow-up
 

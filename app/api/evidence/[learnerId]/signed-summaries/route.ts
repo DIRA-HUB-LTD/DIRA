@@ -5,10 +5,10 @@ import { isSameOriginRequest } from "@/lib/auth/same-origin";
 import { assessEvidenceReadiness } from "@/lib/services/evidence-readiness";
 import { EvidenceSummaryNotFoundError } from "@/lib/services/evidence-summary";
 import {
-  draftPathwayNote,
-  listPathwayNotes,
-  PathwayNoteError,
-} from "@/lib/services/pathway-note";
+  draftSignedSummary,
+  listSignedSummaries,
+  SignedSummaryError,
+} from "@/lib/services/signed-summary";
 
 export const runtime = "nodejs";
 export const maxDuration = 90;
@@ -17,13 +17,13 @@ function failure(error: unknown) {
   if (error instanceof EvidenceSummaryNotFoundError) {
     return NextResponse.json({ error: "Learner is not currently assigned to this teacher" }, { status: 404 });
   }
-  if (error instanceof PathwayNoteError) {
+  if (error instanceof SignedSummaryError) {
     return NextResponse.json({ error: error.message, code: error.code }, { status: error.httpStatus });
   }
-  console.error("Pathway note request failed", {
+  console.error("Signed summary request failed", {
     errorName: error instanceof Error ? error.name : "UnknownError",
   });
-  return NextResponse.json({ error: "The pathway note request failed" }, { status: 500 });
+  return NextResponse.json({ error: "The signed summary request failed" }, { status: 500 });
 }
 
 /** Notes for this learner plus the evidence gate status. */
@@ -36,10 +36,10 @@ export async function GET(
   const { learnerId } = await params;
   try {
     const [notes, readiness] = await Promise.all([
-      listPathwayNotes(learnerId, context),
+      listSignedSummaries(learnerId, context),
       assessEvidenceReadiness(learnerId, context),
     ]);
-    return NextResponse.json({ notes, gate: readiness.pathway_gate });
+    return NextResponse.json({ notes, gate: readiness.summary_gate });
   } catch (error) {
     return failure(error);
   }
@@ -57,7 +57,7 @@ export async function POST(
   if (!context) return NextResponse.json({ error: "A teacher context is required" }, { status: 503 });
   const { learnerId } = await params;
   try {
-    const result = await draftPathwayNote(learnerId, context, { submissionId: randomUUID() });
+    const result = await draftSignedSummary(learnerId, context, { submissionId: randomUUID() });
     return NextResponse.json(result, { status: result.ok ? 200 : 409 });
   } catch (error) {
     return failure(error);

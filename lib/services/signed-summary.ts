@@ -15,7 +15,7 @@ import {
 } from "@/lib/services/evidence-summary";
 
 /**
- * Early-pathway note (the "Early Pathway Guidance" sub-theme).
+ * Signed evidence summary (the "Early Pathway Guidance" sub-theme).
  *
  * A plain-language summary a teacher can use to OPEN a conversation with a
  * guardian. Never a label, verdict, diagnosis or track. Every sentence cites
@@ -24,22 +24,22 @@ import {
  *   2. Model output is schema-checked; every citation must be an allowed ID; a
  *      language guard rejects labelling. One correction attempt, then fail closed.
  *   3. The agent can only create DRAFTs. Approval needs a signed-in, named teacher
- *      who currently teaches the learner (approvePathwayNote).
+ *      who currently teaches the learner (approveSignedSummary).
  *   4. DIRA never sends a note anywhere. The teacher raises it with the guardian.
  */
 
-export const PATHWAY_NOTE_PROMPT_VERSION = "pathway-note-v1";
-const WORKFLOW = "pathway_note";
+export const SIGNED_SUMMARY_PROMPT_VERSION = "signed-summary-v1";
+const WORKFLOW = "signed_summary";
 const REVIEWED_STATUSES = new Set(["not_required", "confirmed", "updated"]);
 
-export const PATHWAY_GATE_REQUIREMENTS = {
+export const SUMMARY_GATE_REQUIREMENTS = {
   minEligibleObservations: 4,
   minDistinctTeachers: 2,
   minDistinctTerms: 2,
   minCompletedTests: 1,
 } as const;
 
-export interface PathwayGateCheck {
+export interface SummaryGateCheck {
   key: "eligible_observations" | "distinct_teachers" | "distinct_terms" | "completed_tests";
   label: string;
   required: number;
@@ -47,24 +47,24 @@ export interface PathwayGateCheck {
   met: boolean;
 }
 
-export interface PathwayGate {
+export interface SummaryGate {
   eligible: boolean;
-  checks: PathwayGateCheck[];
+  checks: SummaryGateCheck[];
 }
 
 /** Deterministic: is there enough tested, multi-teacher, multi-term evidence? */
-export function evaluatePathwayGate(
+export function evaluateSummaryGate(
   observations: Pick<EvidenceObservation, "teacher_review_status" | "teacher_id" | "academic_year" | "term">[],
   tests: Pick<EvidenceTest, "status" | "outcome_observation_id">[],
-): PathwayGate {
+): SummaryGate {
   const eligible = observations.filter((item) => REVIEWED_STATUSES.has(item.teacher_review_status));
   const teachers = new Set(eligible.map((item) => item.teacher_id));
   const terms = new Set(eligible.map((item) => `${item.academic_year}:${item.term ?? "?"}`));
   const completed = tests.filter(
     (test) => test.status === "COMPLETED" && test.outcome_observation_id !== null,
   );
-  const r = PATHWAY_GATE_REQUIREMENTS;
-  const checks: PathwayGateCheck[] = [
+  const r = SUMMARY_GATE_REQUIREMENTS;
+  const checks: SummaryGateCheck[] = [
     {
       key: "eligible_observations",
       label: "Reviewed observations",
@@ -129,12 +129,12 @@ const noteSchema = z.object({
     .max(8),
   limitations: z.array(z.string().trim().min(5).max(300)).min(1).max(4),
 });
-export type PathwayNoteContent = z.infer<typeof noteSchema>;
+export type SignedSummaryContent = z.infer<typeof noteSchema>;
 
 /** Validate a model draft against the allowed evidence IDs and the language guard. */
 export function validateNoteContent(value: unknown, allowedIds: Set<string>): {
   ok: true;
-  content: PathwayNoteContent;
+  content: SignedSummaryContent;
 } | { ok: false; problems: string[] } {
   const parsed = noteSchema.safeParse(value);
   if (!parsed.success) {
@@ -179,7 +179,7 @@ export function validateNoteContent(value: unknown, allowedIds: Set<string>): {
   return problems.length ? { ok: false, problems } : { ok: true, content: parsed.data };
 }
 
-export class PathwayNoteError extends Error {
+export class SignedSummaryError extends Error {
   constructor(
     public readonly code:
       | "not_found"
@@ -191,20 +191,20 @@ export class PathwayNoteError extends Error {
     public readonly httpStatus: number,
   ) {
     super(message);
-    this.name = "PathwayNoteError";
+    this.name = "SignedSummaryError";
   }
 }
 
-export interface PathwayNote {
+export interface SignedSummary {
   note_id: string;
   learner_id: string;
   status: "DRAFT" | "APPROVED" | "DISCARDED";
-  sentences: PathwayNoteContent["sentences"];
+  sentences: SignedSummaryContent["sentences"];
   draft_text: string;
   limitations: string[];
   evidence_ids: string[];
   test_ids: string[];
-  gate_snapshot: PathwayGate;
+  gate_snapshot: SummaryGate;
   model: string;
   prompt_version: string;
   run_id: string | null;
@@ -219,9 +219,9 @@ const NOTE_COLUMNS = `note_id::text AS note_id, learner_id, status, sentences, d
   evidence_ids, test_ids, gate_snapshot, model, prompt_version, run_id::text AS run_id,
   drafted_for_teacher_id, approved_by_teacher_id, approved_text, approved_at, created_at`;
 
-export type DraftPathwayNoteResult =
-  | { ok: true; status: "drafted"; note: PathwayNote; duplicate: boolean }
-  | { ok: false; status: "gate_not_met"; gate: PathwayGate; message: string };
+export type DraftSignedSummaryResult =
+  | { ok: true; status: "drafted"; note: SignedSummary; duplicate: boolean }
+  | { ok: false; status: "gate_not_met"; gate: SummaryGate; message: string };
 
 function teacherLabels(observations: EvidenceObservation[]): Map<string, string> {
   const labels = new Map<string, string>();
@@ -291,9 +291,9 @@ function parseJson(content: string | null): unknown {
   }
 }
 
-async function loadOpenDraft(learnerId: string, teacherId: string): Promise<PathwayNote | null> {
-  const result = await getPool().query<PathwayNote>(
-    `SELECT ${NOTE_COLUMNS} FROM pathway_notes
+async function loadOpenDraft(learnerId: string, teacherId: string): Promise<SignedSummary | null> {
+  const result = await getPool().query<SignedSummary>(
+    `SELECT ${NOTE_COLUMNS} FROM signed_summaries
      WHERE learner_id = $1 AND drafted_for_teacher_id = $2 AND status = 'DRAFT'`,
     [learnerId, teacherId],
   );
@@ -301,14 +301,14 @@ async function loadOpenDraft(learnerId: string, teacherId: string): Promise<Path
 }
 
 /**
- * Draft a pathway note for a learner the teacher currently teaches.
+ * Draft a summary to sign for a learner the teacher currently teaches.
  * Idempotent: an existing open draft for this learner and teacher is returned.
  */
-export async function draftPathwayNote(
+export async function draftSignedSummary(
   learnerIdInput: string,
   context: SuggestTestContext,
   options: { runId?: string; submissionId?: string } = {},
-): Promise<DraftPathwayNoteResult> {
+): Promise<DraftSignedSummaryResult> {
   const learnerId = learnerIdInput.trim();
   const runId = options.runId ?? createRunId();
   // Throws EvidenceSummaryNotFoundError if this teacher does not currently teach the learner.
@@ -319,13 +319,13 @@ export async function draftPathwayNote(
   const completedTests = snapshot.tests.filter(
     (test) => test.status === "COMPLETED" && test.outcome_observation_id !== null,
   );
-  const gate = evaluatePathwayGate(snapshot.observations, snapshot.tests);
+  const gate = evaluateSummaryGate(snapshot.observations, snapshot.tests);
   await logAgentEvent({
     run_id: runId,
     workflow: WORKFLOW,
     event_type: "tool_event",
-    agent_action: "pathway_gate_checked",
-    tool_name: "draft_pathway_note",
+    agent_action: "summary_gate_checked",
+    tool_name: "draft_signed_summary",
     status: "success",
     metadata: { eligible: gate.eligible, checks: gate.checks.map(({ key, actual, met }) => ({ key, actual, met })) },
   });
@@ -335,7 +335,7 @@ export async function draftPathwayNote(
       status: "gate_not_met",
       gate,
       message:
-        "There is not yet enough tested, multi-teacher, multi-term evidence for a pathway note. Keep observing and complete a classroom test first.",
+        "There is not yet enough tested, multi-teacher, multi-term evidence for a signed summary. Keep observing and complete a classroom test first.",
     };
   }
 
@@ -347,7 +347,7 @@ export async function draftPathwayNote(
     ...completedTests.map((test) => test.test_id),
   ]);
   const messages = buildMessages(snapshot.learner.display_name, eligibleObservations, completedTests);
-  let content: PathwayNoteContent | null = null;
+  let content: SignedSummaryContent | null = null;
   let problems: string[] = [];
   for (let attempt = 1; attempt <= 2 && !content; attempt += 1) {
     const completion = await createAgentCompletion(
@@ -373,8 +373,8 @@ export async function draftPathwayNote(
         workflow: WORKFLOW,
         attempt,
         event_type: "tool_event",
-        agent_action: "pathway_note_validation_failed",
-        tool_name: "draft_pathway_note",
+        agent_action: "signed_summary_validation_failed",
+        tool_name: "draft_signed_summary",
         status: "error",
         error: "invalid_model_output",
         metadata: { problems },
@@ -382,7 +382,7 @@ export async function draftPathwayNote(
     }
   }
   if (!content) {
-    throw new PathwayNoteError(
+    throw new SignedSummaryError(
       "validation_failed",
       "The model could not produce a fully cited, non-labelling note after one correction. Nothing was saved.",
       502,
@@ -393,8 +393,8 @@ export async function draftPathwayNote(
   const evidenceIds = citedIds.filter((id) => !completedTests.some((test) => test.test_id === id));
   const testIds = citedIds.filter((id) => completedTests.some((test) => test.test_id === id));
   const draftText = content.sentences.map((sentence) => sentence.text).join(" ");
-  const inserted = await getPool().query<PathwayNote>(
-    `INSERT INTO pathway_notes (
+  const inserted = await getPool().query<SignedSummary>(
+    `INSERT INTO signed_summaries (
        learner_id, school_id, drafted_for_teacher_id, sentences, draft_text, limitations,
        evidence_ids, test_ids, gate_snapshot, model, prompt_version, run_id, submission_id)
      VALUES ($1, $2, $3, $4::jsonb, $5, $6::jsonb, $7::text[], $8::text[], $9::jsonb, $10, $11, $12::uuid, $13)
@@ -411,31 +411,31 @@ export async function draftPathwayNote(
       testIds,
       JSON.stringify(gate),
       DIRA_AGENT_MODEL,
-      PATHWAY_NOTE_PROMPT_VERSION,
+      SIGNED_SUMMARY_PROMPT_VERSION,
       runId,
       options.submissionId ?? randomUUID(),
     ],
   );
   const note = inserted.rows[0] ?? (await loadOpenDraft(learnerId, context.teacher_id));
-  if (!note) throw new PathwayNoteError("not_found", "The draft could not be saved.", 500);
+  if (!note) throw new SignedSummaryError("not_found", "The draft could not be saved.", 500);
   await logAgentEvent({
     run_id: runId,
     workflow: WORKFLOW,
     event_type: "tool_event",
-    agent_action: "pathway_note_drafted",
-    tool_name: "draft_pathway_note",
+    agent_action: "signed_summary_drafted",
+    tool_name: "draft_signed_summary",
     status: "success",
     metadata: { note_id: note.note_id, cited_ids: citedIds.length, duplicate: !inserted.rows[0] },
   });
   return { ok: true, status: "drafted", note, duplicate: !inserted.rows[0] };
 }
 
-export async function listPathwayNotes(
+export async function listSignedSummaries(
   learnerId: string,
   context: SuggestTestContext,
-): Promise<PathwayNote[]> {
-  const result = await getPool().query<PathwayNote>(
-    `SELECT ${NOTE_COLUMNS} FROM pathway_notes n
+): Promise<SignedSummary[]> {
+  const result = await getPool().query<SignedSummary>(
+    `SELECT ${NOTE_COLUMNS} FROM signed_summaries n
      WHERE n.learner_id = $1 AND n.school_id = $2
        AND ${teacherCurrentlyTeachesLearnerSql("n.learner_id", "$2", "$3")}
      ORDER BY n.created_at DESC
@@ -452,7 +452,7 @@ async function loadDraftForDecision(
   teacher: { teacher_id: string; school_id: string },
 ) {
   const result = await client.query<{ status: string; draft_text: string }>(
-    `SELECT n.status, n.draft_text FROM pathway_notes n
+    `SELECT n.status, n.draft_text FROM signed_summaries n
      WHERE n.note_id::text = $1 AND n.learner_id = $2 AND n.school_id = $3
        AND ${teacherCurrentlyTeachesLearnerSql("n.learner_id", "$3", "$4")}
      FOR UPDATE OF n`,
@@ -460,14 +460,14 @@ async function loadDraftForDecision(
   );
   const row = result.rows[0];
   if (!row) {
-    throw new PathwayNoteError(
+    throw new SignedSummaryError(
       "not_found",
       "This note does not exist or you do not currently teach this learner.",
       404,
     );
   }
   if (row.status !== "DRAFT") {
-    throw new PathwayNoteError("not_a_draft", `This note is already ${row.status.toLowerCase()}.`, 409);
+    throw new SignedSummaryError("not_a_draft", `This note is already ${row.status.toLowerCase()}.`, 409);
   }
   return row;
 }
@@ -477,12 +477,12 @@ async function loadDraftForDecision(
  * never from the demo fallback. The teacher may edit the wording; labels and
  * diagnoses are still refused. Approval does not send anything to anyone.
  */
-export async function approvePathwayNote(
+export async function approveSignedSummary(
   noteId: string,
   learnerId: string,
   teacher: { teacher_id: string; school_id: string },
   editedText?: string,
-): Promise<PathwayNote> {
+): Promise<SignedSummary> {
   const client = await getPool().connect();
   try {
     await client.query("BEGIN");
@@ -490,14 +490,14 @@ export async function approvePathwayNote(
     const finalText = (editedText?.trim() || draft.draft_text).slice(0, 4000);
     const problems = findLanguageProblems(finalText, false);
     if (problems.length) {
-      throw new PathwayNoteError(
+      throw new SignedSummaryError(
         "invalid_text",
         `The note ${problems.join(" and ")}. Describe what was observed instead.`,
         422,
       );
     }
-    const updated = await client.query<PathwayNote>(
-      `UPDATE pathway_notes
+    const updated = await client.query<SignedSummary>(
+      `UPDATE signed_summaries
        SET status = 'APPROVED', approved_by_teacher_id = $2, approved_text = $3, approved_at = NOW()
        WHERE note_id::text = $1
        RETURNING ${NOTE_COLUMNS}`,
@@ -508,7 +508,7 @@ export async function approvePathwayNote(
       run_id: createRunId(),
       workflow: WORKFLOW,
       event_type: "tool_event",
-      agent_action: "pathway_note_approved_by_teacher",
+      agent_action: "signed_summary_approved_by_teacher",
       tool_name: "teacher_approval",
       status: "success",
       metadata: { note_id: noteId, edited: Boolean(editedText?.trim()) },
@@ -522,7 +522,7 @@ export async function approvePathwayNote(
   }
 }
 
-export async function discardPathwayNote(
+export async function discardSignedSummary(
   noteId: string,
   learnerId: string,
   teacher: { teacher_id: string; school_id: string },
@@ -532,7 +532,7 @@ export async function discardPathwayNote(
     await client.query("BEGIN");
     await loadDraftForDecision(client, noteId, learnerId, teacher);
     await client.query(
-      `UPDATE pathway_notes SET status = 'DISCARDED', discarded_by_teacher_id = $2, discarded_at = NOW()
+      `UPDATE signed_summaries SET status = 'DISCARDED', discarded_by_teacher_id = $2, discarded_at = NOW()
        WHERE note_id::text = $1`,
       [noteId, teacher.teacher_id],
     );

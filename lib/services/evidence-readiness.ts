@@ -8,7 +8,7 @@ import {
 } from "@/lib/mcp-tools/suggestTest";
 import { loadCurrentAssessments } from "@/lib/services/evidence-reasoning";
 import { buildEvidenceSummary } from "@/lib/services/evidence-summary";
-import { evaluatePathwayGate, type PathwayGate } from "@/lib/services/pathway-note";
+import { evaluateSummaryGate, type SummaryGate } from "@/lib/services/signed-summary";
 import { loadPreviousSuggestions } from "@/lib/services/suggestion-workflow";
 
 /**
@@ -21,7 +21,7 @@ import { loadPreviousSuggestions } from "@/lib/services/suggestion-workflow";
 export type ReadinessAction =
   | "suggest_test"
   | "assess_test_outcome"
-  | "draft_pathway_note"
+  | "draft_signed_summary"
   | "wait_for_more_evidence";
 
 export interface EvidenceReadiness {
@@ -44,8 +44,8 @@ export interface EvidenceReadiness {
   };
   open_tests: Array<{ test_id: string; status: string; activity_date: string }>;
   tests_needing_assessment: string[];
-  pathway_gate: PathwayGate;
-  open_pathway_draft_id: string | null;
+  summary_gate: SummaryGate;
+  open_summary_draft_id: string | null;
   available_actions: ReadinessAction[];
 }
 
@@ -97,9 +97,9 @@ export async function assessEvidenceReadiness(
     .filter((test) => !assessed.has(test.test_id) && test.hypothesis)
     .map((test) => test.test_id);
 
-  const gate = evaluatePathwayGate(snapshot.observations, snapshot.tests);
+  const gate = evaluateSummaryGate(snapshot.observations, snapshot.tests);
   const draft = await getPool().query<{ note_id: string }>(
-    `SELECT note_id::text AS note_id FROM pathway_notes
+    `SELECT note_id::text AS note_id FROM signed_summaries
      WHERE learner_id = $1 AND drafted_for_teacher_id = $2 AND status = 'DRAFT'`,
     [learnerId, context.teacher_id],
   );
@@ -108,7 +108,7 @@ export async function assessEvidenceReadiness(
   const available: ReadinessAction[] = [];
   if (preparation.ok) available.push("suggest_test");
   if (testsNeedingAssessment.length) available.push("assess_test_outcome");
-  if (gate.eligible && !openDraftId) available.push("draft_pathway_note");
+  if (gate.eligible && !openDraftId) available.push("draft_signed_summary");
   if (available.length === 0) available.push("wait_for_more_evidence");
 
   const eligible = snapshot.observations.filter((item) =>
@@ -138,8 +138,8 @@ export async function assessEvidenceReadiness(
       .filter((test) => test.status === "SUGGESTED" || test.status === "ACCEPTED")
       .map((test) => ({ test_id: test.test_id, status: test.status, activity_date: test.activity_date })),
     tests_needing_assessment: testsNeedingAssessment,
-    pathway_gate: gate,
-    open_pathway_draft_id: openDraftId,
+    summary_gate: gate,
+    open_summary_draft_id: openDraftId,
     available_actions: available,
   };
 }

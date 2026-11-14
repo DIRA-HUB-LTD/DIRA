@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 
 interface EvidenceClaim {
   statement: string;
@@ -254,11 +254,14 @@ export default function EvidenceReasoning({
   learner,
   observations,
   tests,
+  children,
 }: {
   learnerId: string;
   learner: LearnerHeader;
   observations: Array<{ observed_at: string }>;
   tests: EvidenceTest[];
+  /** Rendered at the foot of the card (the signed evidence summary). */
+  children?: ReactNode;
 }) {
   const activeSummaryRequest = useRef<Promise<void> | null>(null);
   const summaryRequestId = useRef<string | null>(null);
@@ -809,6 +812,7 @@ export default function EvidenceReasoning({
             })
           )}
         </section>
+        {children && <div className="mt-2">{children}</div>}
       </section>
 
       <p className="px-1 text-xs leading-5 text-slate-500 dark:text-gray-400">

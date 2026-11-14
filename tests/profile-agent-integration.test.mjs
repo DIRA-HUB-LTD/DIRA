@@ -8,7 +8,7 @@ const holder = vi.hoisted(() => ({ pool: null, noteReplies: [] }));
 vi.mock("@/lib/db/client", () => ({ getPool: () => holder.pool }));
 vi.mock("@/lib/models", () => ({
   DIRA_AGENT_MODEL: "glm-5.3-flash",
-  // Used by draft_pathway_note inside the MCP server.
+  // Used by draft_signed_summary inside the MCP server.
   createAgentCompletion: vi.fn(async () => ({
     content: holder.noteReplies.shift() ?? null,
     toolCalls: [],
@@ -39,8 +39,8 @@ describe("profile-update agent end to end", () => {
     holder.noteReplies = [validNoteReply(fixture.observationIds, fixture.testId)];
     const turns = [
       { content: null, toolCalls: [call("check_evidence_readiness")] },
-      { content: null, toolCalls: [call("draft_pathway_note")] },
-      { content: "Drafted a pathway note for your review.", toolCalls: [] },
+      { content: null, toolCalls: [call("draft_signed_summary")] },
+      { content: "Drafted a summary for you to review and sign.", toolCalls: [] },
     ];
     const seenToolResults = [];
     const complete = vi.fn(async (messages) => {
@@ -57,14 +57,14 @@ describe("profile-update agent end to end", () => {
 
     expect(result.actions.map((action) => [action.tool, action.status])).toEqual([
       ["check_evidence_readiness", "success"],
-      ["draft_pathway_note", "success"],
+      ["draft_signed_summary", "success"],
     ]);
     const readiness = JSON.parse(seenToolResults[0]);
     expect(readiness.academic_years).toEqual([fixture.years.lastYear, fixture.years.thisYear]);
-    expect(readiness.available_actions).toContain("draft_pathway_note");
+    expect(readiness.available_actions).toContain("draft_signed_summary");
 
     const notes = await database.pool.query(
-      "SELECT status, run_id::text AS run_id FROM pathway_notes WHERE learner_id = 'L1'",
+      "SELECT status, run_id::text AS run_id FROM signed_summaries WHERE learner_id = 'L1'",
     );
     expect(notes.rows).toEqual([{ status: "DRAFT", run_id: result.run_id }]);
 
@@ -78,7 +78,7 @@ describe("profile-update agent end to end", () => {
       // (model_call events come from lib/models.ts, which is scripted in this test.)
       expect.arrayContaining(["run_started", "tool_proposed", "tool_executed", "run_finished"]),
     );
-    expect(events.rows.some((row) => row.tool_name === "draft_pathway_note")).toBe(true);
+    expect(events.rows.some((row) => row.tool_name === "draft_signed_summary")).toBe(true);
   });
 
   it("refuses a teacher who does not teach the learner, through the tool itself", async () => {

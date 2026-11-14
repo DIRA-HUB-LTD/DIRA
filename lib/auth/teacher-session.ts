@@ -99,7 +99,7 @@ export function sessionCookieOptions() {
 
 /**
  * The teacher signed in on this request, or null. Never falls back to the demo
- * teacher. Use this for consequential actions such as approving a pathway note.
+ * teacher. Use this for consequential actions such as approving a signed summary.
  */
 export async function getSignedInTeacher(): Promise<SignedInTeacher | null> {
   let token: string | undefined;

@@ -201,6 +201,8 @@ Use non-verdict labels for workflow state, such as `INSUFFICIENT_EVIDENCE`, `QUE
 
 Do not recreate the old pathway-note state machine (`READY_FOR_REVIEW`, `APPROVED`, `SHARED_WITH_GUARDIAN`) for the current MVP.
 
+> **Decision update (14 Nov 2026, founder):** the Evidence Card gains one closing step, the **signed evidence summary**. When a deterministic evidence gate is met (2+ teachers, 2+ terms, 1+ completed test), the agent may draft a short, fully cited summary of the card's evidence for a family conversation. A named, signed-in teacher edits and signs it. It is stored in `signed_summaries` (`DRAFT` → `APPROVED` or `DISCARDED`). There is still **no** `SHARED_WITH_GUARDIAN` state, no delivery and no guardian approval: DIRA never sends it, and it never states a pathway, label or verdict. The old `teacher_reviews` tables and the `approve-note` stub stay deprecated.
+
 ## 4. Relationships
 
 ```mermaid

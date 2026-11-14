@@ -3,7 +3,7 @@
 //
 // Policy: with tools, it checks readiness, takes the first allowed action, and
 // re-checks; it finishes when nothing is allowed. Without tools (JSON mode), it
-// writes a pathway note citing the first IDs it is given.
+// writes a signed summary citing the first IDs it is given.
 
 let counter = 0;
 

@@ -15,19 +15,19 @@ vi.mock("@/lib/models", () => ({
 
 const models = await import("@/lib/models");
 const {
-  approvePathwayNote,
-  discardPathwayNote,
-  draftPathwayNote,
-  evaluatePathwayGate,
+  approveSignedSummary,
+  discardSignedSummary,
+  draftSignedSummary,
+  evaluateSummaryGate,
   findLanguageProblems,
-  listPathwayNotes,
+  listSignedSummaries,
   validateNoteContent,
-} = await import("../lib/services/pathway-note.ts");
+} = await import("../lib/services/signed-summary.ts");
 const { assessEvidenceReadiness } = await import("../lib/services/evidence-readiness.ts");
 
 const CURRENT = { teacher_id: "T_CUR", school_id: "SCH1" };
 
-describe("pathway gate (deterministic)", () => {
+describe("summary gate (deterministic)", () => {
   const observation = (teacher_id, academic_year, term, status = "not_required") => ({
     teacher_id,
     academic_year,
@@ -43,10 +43,10 @@ describe("pathway gate (deterministic)", () => {
       observation("B", 2026, "Term 3"),
     ];
     const completed = [{ status: "COMPLETED", outcome_observation_id: "O" }];
-    expect(evaluatePathwayGate(observations, completed).eligible).toBe(true);
-    expect(evaluatePathwayGate(observations, []).eligible).toBe(false);
+    expect(evaluateSummaryGate(observations, completed).eligible).toBe(true);
+    expect(evaluateSummaryGate(observations, []).eligible).toBe(false);
     const oneTeacher = observations.map((item) => ({ ...item, teacher_id: "A" }));
-    expect(evaluatePathwayGate(oneTeacher, completed).eligible).toBe(false);
+    expect(evaluateSummaryGate(oneTeacher, completed).eligible).toBe(false);
   });
 
   it("does not count observations still awaiting teacher review", () => {
@@ -56,7 +56,7 @@ describe("pathway gate (deterministic)", () => {
       observation("B", 2026, "Term 3", "recorded"),
       observation("B", 2026, "Term 3", "recorded"),
     ];
-    const gate = evaluatePathwayGate(observations, [{ status: "COMPLETED", outcome_observation_id: "O" }]);
+    const gate = evaluateSummaryGate(observations, [{ status: "COMPLETED", outcome_observation_id: "O" }]);
     expect(gate.eligible).toBe(false);
     expect(gate.checks.find((check) => check.key === "eligible_observations").actual).toBe(2);
   });
@@ -105,7 +105,7 @@ describe("note validation and language guard", () => {
   });
 });
 
-describe("drafting and approving a pathway note", () => {
+describe("drafting and approving a signed summary", () => {
   let database;
   let fixture;
 
@@ -127,15 +127,15 @@ describe("drafting and approving a pathway note", () => {
   it("reports readiness, including that a note can now be drafted", async () => {
     const readiness = await assessEvidenceReadiness("L1", CURRENT);
     expect(readiness.academic_years).toEqual([fixture.years.lastYear, fixture.years.thisYear]);
-    expect(readiness.pathway_gate.eligible).toBe(true);
+    expect(readiness.summary_gate.eligible).toBe(true);
     expect(readiness.tests_needing_assessment).toEqual(["TEST-DONE"]);
     expect(readiness.available_actions).toEqual(
-      expect.arrayContaining(["draft_pathway_note", "assess_test_outcome"]),
+      expect.arrayContaining(["draft_signed_summary", "assess_test_outcome"]),
     );
   });
 
   it("does not call the model when the gate is not met", async () => {
-    const result = await draftPathwayNote("L2", CURRENT);
+    const result = await draftSignedSummary("L2", CURRENT);
     expect(result).toMatchObject({ ok: false, status: "gate_not_met" });
     expect(models.createAgentCompletion).not.toHaveBeenCalled();
   });
@@ -151,9 +151,9 @@ describe("drafting and approving a pathway note", () => {
         limitations: ["None."],
       }),
     ];
-    await expect(draftPathwayNote("L1", CURRENT)).rejects.toMatchObject({ code: "validation_failed" });
+    await expect(draftSignedSummary("L1", CURRENT)).rejects.toMatchObject({ code: "validation_failed" });
     expect(models.createAgentCompletion).toHaveBeenCalledTimes(2);
-    const saved = await database.pool.query("SELECT COUNT(*)::int AS count FROM pathway_notes");
+    const saved = await database.pool.query("SELECT COUNT(*)::int AS count FROM signed_summaries");
     expect(saved.rows[0].count).toBe(0);
   });
 
@@ -162,7 +162,7 @@ describe("drafting and approving a pathway note", () => {
       JSON.stringify({ sentences: [{ text: "Leads groups well.", citations: ["NOPE"] }], limitations: ["x"] }),
       validNoteReply(fixture.observationIds, fixture.testId),
     ];
-    const result = await draftPathwayNote("L1", CURRENT);
+    const result = await draftSignedSummary("L1", CURRENT);
     expect(result.ok).toBe(true);
     expect(result.note.status).toBe("DRAFT");
     expect(result.note.test_ids).toEqual(["TEST-DONE"]);
@@ -171,28 +171,28 @@ describe("drafting and approving a pathway note", () => {
   });
 
   it("returns the existing open draft instead of creating another", async () => {
-    const again = await draftPathwayNote("L1", CURRENT);
+    const again = await draftSignedSummary("L1", CURRENT);
     expect(again).toMatchObject({ ok: true, duplicate: true });
     expect(models.createAgentCompletion).not.toHaveBeenCalled();
   });
 
   it("refuses approval by a teacher who does not teach the learner", async () => {
-    const [note] = await listPathwayNotes("L1", CURRENT);
+    const [note] = await listSignedSummaries("L1", CURRENT);
     await expect(
-      approvePathwayNote(note.note_id, "L1", { teacher_id: "T_OTHER", school_id: "SCH1" }),
+      approveSignedSummary(note.note_id, "L1", { teacher_id: "T_OTHER", school_id: "SCH1" }),
     ).rejects.toMatchObject({ code: "not_found" });
   });
 
   it("refuses an approval edit that adds a label", async () => {
-    const [note] = await listPathwayNotes("L1", CURRENT);
+    const [note] = await listSignedSummaries("L1", CURRENT);
     await expect(
-      approvePathwayNote(note.note_id, "L1", CURRENT, "Amani is gifted and should be streamed."),
+      approveSignedSummary(note.note_id, "L1", CURRENT, "Amani is gifted and should be streamed."),
     ).rejects.toMatchObject({ code: "invalid_text" });
   });
 
   it("records the named approver, time and exact approved text", async () => {
-    const [note] = await listPathwayNotes("L1", CURRENT);
-    const approved = await approvePathwayNote(
+    const [note] = await listSignedSummaries("L1", CURRENT);
+    const approved = await approveSignedSummary(
       note.note_id,
       "L1",
       CURRENT,
@@ -204,17 +204,17 @@ describe("drafting and approving a pathway note", () => {
     });
     expect(approved.approved_text).toMatch(/what you notice at home/);
     expect(approved.approved_at).toBeTruthy();
-    await expect(approvePathwayNote(note.note_id, "L1", CURRENT)).rejects.toMatchObject({
+    await expect(approveSignedSummary(note.note_id, "L1", CURRENT)).rejects.toMatchObject({
       code: "not_a_draft",
     });
   });
 
   it("lets the teacher discard a new draft", async () => {
     holder.replies = [validNoteReply(fixture.observationIds, fixture.testId)];
-    const result = await draftPathwayNote("L1", CURRENT);
+    const result = await draftSignedSummary("L1", CURRENT);
     expect(result.duplicate).toBe(false);
-    await discardPathwayNote(result.note.note_id, "L1", CURRENT);
-    const [latest] = await listPathwayNotes("L1", CURRENT);
+    await discardSignedSummary(result.note.note_id, "L1", CURRENT);
+    const [latest] = await listSignedSummaries("L1", CURRENT);
     expect(latest.status).toBe("DISCARDED");
   });
 });

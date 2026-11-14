@@ -41,10 +41,10 @@ const TOOL_CALL_LIMITS: Record<string, number> = {
   retrieve_education_resources: 1,
   suggest_test: 1,
   assess_test_outcome: 2,
-  draft_pathway_note: 1,
+  draft_signed_summary: 1,
 };
 export const PROFILE_AGENT_TOOLS = Object.keys(TOOL_CALL_LIMITS);
-const ACTION_TOOLS = new Set(["suggest_test", "assess_test_outcome", "draft_pathway_note"]);
+const ACTION_TOOLS = new Set(["suggest_test", "assess_test_outcome", "draft_signed_summary"]);
 const HIDDEN_ARGUMENTS = new Set(["learner_id", "submission_id"]);
 
 export interface ProfileAgentAction {
@@ -152,7 +152,7 @@ const SYSTEM_PROMPT = [
   "2. Make a short plan from that result. Use only the actions it allows:",
   "   - assess_test_outcome for each test_id in tests_needing_assessment (a completed test whose outcome has not been compared with its hypothesis yet).",
   "   - suggest_test when a repeated but under-corroborated signal can be explored with a small classroom test.",
-  "   - draft_pathway_note only when the evidence gate is met. It creates a DRAFT for the teacher to review; it is never sent.",
+  "   - draft_signed_summary only when the evidence gate is met. It creates a DRAFT for the teacher to review; it is never sent.",
   "   - If nothing is allowed, do not force an action: explain what evidence is still needed.",
   "3. After any action, call check_evidence_readiness again before deciding the next step, because the evidence has changed.",
   "4. If a tool fails or is blocked, read the reason, adjust your plan, and continue or stop. Do not retry the same failing call.",
@@ -405,8 +405,8 @@ function summarizeOutput(tool: string, result: unknown): string {
       return isRecord(data.assessment)
         ? `Assessed ${String(data.assessment.test_id)}: ${String(data.assessment.classification)}`
         : `Not assessed: ${typeof data.reason === "string" ? data.reason : "see log"}`;
-    case "draft_pathway_note":
-      return data.ok === true ? "Drafted a pathway note for teacher review" : "Gate not met; no note drafted";
+    case "draft_signed_summary":
+      return data.ok === true ? "Drafted a summary for the teacher to sign" : "Gate not met; no note drafted";
     default:
       return "Done";
   }

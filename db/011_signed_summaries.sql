@@ -1,8 +1,8 @@
--- Early-pathway notes: a plain-language, fully cited summary a teacher can use to
+-- Signed evidence summaries: a plain-language, fully cited summary a teacher can use to
 -- open a conversation with a guardian. The agent may only create DRAFT rows.
 -- Only a signed-in, named teacher can approve (or discard) a draft, and DIRA never
 -- sends a note anywhere: the teacher raises it with the guardian in person.
-CREATE TABLE IF NOT EXISTS pathway_notes (
+CREATE TABLE IF NOT EXISTS signed_summaries (
     note_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     learner_id TEXT NOT NULL REFERENCES learners(learner_id),
     school_id TEXT NOT NULL REFERENCES schools(school_id),
@@ -37,10 +37,10 @@ CREATE TABLE IF NOT EXISTS pathway_notes (
     )
 );
 
-CREATE INDEX IF NOT EXISTS idx_pathway_notes_learner
-    ON pathway_notes (learner_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_signed_summaries_learner
+    ON signed_summaries (learner_id, created_at DESC);
 
 -- At most one open draft per learner per teacher, so retries cannot pile up drafts.
-CREATE UNIQUE INDEX IF NOT EXISTS idx_pathway_notes_one_open_draft
-    ON pathway_notes (learner_id, drafted_for_teacher_id)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_signed_summaries_one_open_draft
+    ON signed_summaries (learner_id, drafted_for_teacher_id)
     WHERE status = 'DRAFT';

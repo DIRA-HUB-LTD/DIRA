@@ -25,17 +25,19 @@ interface Note {
 }
 
 /**
- * Early-pathway note: a cited, plain-language conversation starter for a guardian.
- * The agent can only draft. A named, signed-in teacher approves, and DIRA never
- * sends it: the teacher raises it with the guardian personally.
+ * Signed evidence summary: the foot of the Learner Evidence Card.
+ * When the evidence gate is met, the cited evidence on the card can be turned into
+ * a short, plain-language summary for a conversation with the learner's family.
+ * The agent can only draft. A named, signed-in teacher signs it, and DIRA never
+ * sends it: the teacher raises it with the family personally.
  */
-export default function PathwayNotePanel({ learnerId }: { learnerId: string }) {
+export default function SignedSummarySection({ learnerId }: { learnerId: string }) {
   const [notes, setNotes] = useState<Note[]>([]);
   const [gate, setGate] = useState<{ eligible: boolean; checks: GateCheck[] } | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
-  const base = `/api/evidence/${encodeURIComponent(learnerId)}/pathway-notes`;
+  const base = `/api/evidence/${encodeURIComponent(learnerId)}/signed-summaries`;
 
   const load = useCallback(async () => {
     const response = await fetch(base, { cache: "no-store" });
@@ -57,7 +59,7 @@ export default function PathwayNotePanel({ learnerId }: { learnerId: string }) {
     try {
       const response = await fetch(base, { method: "POST" });
       const body = await response.json().catch(() => ({}));
-      if (!response.ok) setMessage(body.message ?? body.error ?? "The note could not be drafted.");
+      if (!response.ok) setMessage(body.message ?? body.error ?? "The summary could not be drafted.");
       await load();
     } finally {
       setBusy(false);
@@ -80,7 +82,7 @@ export default function PathwayNotePanel({ learnerId }: { learnerId: string }) {
       }
       setMessage(
         action === "approve"
-          ? `Approved by ${body.approved_by}. DIRA has not sent this anywhere. Raise it with the guardian yourself.`
+          ? `Signed by ${body.approved_by}. DIRA has not sent this anywhere. Raise it with the family yourself.`
           : "Draft discarded.",
       );
       await load();
@@ -93,11 +95,15 @@ export default function PathwayNotePanel({ learnerId }: { learnerId: string }) {
   const approved = notes.filter((note) => note.status === "APPROVED");
 
   return (
-    <section className="mt-6 rounded-xl border border-[#d8e0ee] bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900">
-      <h2 className="text-lg font-semibold">Early pathway note</h2>
+    <section
+      aria-label="Sign this summary"
+      className="rounded-lg border border-[#e8eaf0] bg-white p-3 dark:border-[#26364b] dark:bg-[#111e30] sm:p-4"
+    >
+      <h2 className="text-lg font-bold text-[#101d4c] dark:text-gray-100">Sign this summary</h2>
       <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">
-        A short, cited note you can use to start a conversation with the learner&apos;s guardian. It
-        describes what was observed and tested. It never labels the learner or picks a pathway.
+        When the evidence is strong enough, DIRA turns the cited evidence on this card into a short
+        summary you can use in a conversation with the learner&apos;s family. You edit it and sign it
+        as yourself. DIRA never sends it. It never labels the learner or picks a pathway.
       </p>
 
       {gate && !gate.eligible && !openDraft && (
@@ -115,14 +121,14 @@ export default function PathwayNotePanel({ learnerId }: { learnerId: string }) {
 
       {gate?.eligible && !openDraft && (
         <Button className="mt-4" onClick={draft} disabled={busy}>
-          {busy ? "Drafting…" : "Draft a pathway note"}
+          {busy ? "Drafting…" : "Draft a summary to sign"}
         </Button>
       )}
 
       {openDraft && (
         <div className="mt-4 space-y-3">
           <p className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
-            Draft. Not approved and not shared
+            Draft. Not signed and not shared
           </p>
           <ol className="space-y-2 text-sm">
             {openDraft.sentences.map((sentence, index) => (
@@ -143,7 +149,7 @@ export default function PathwayNotePanel({ learnerId }: { learnerId: string }) {
             </ul>
           </div>
           <label className="block text-sm font-medium">
-            Your wording (edit before approving)
+            Your wording (edit before signing)
             <textarea
               className="mt-1 h-28 w-full rounded-md border border-gray-300 bg-white p-2 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-950 dark:text-gray-100"
               value={editText}
@@ -153,13 +159,13 @@ export default function PathwayNotePanel({ learnerId }: { learnerId: string }) {
           </label>
           <div className="flex flex-wrap gap-2">
             <Button onClick={() => decide(openDraft.note_id, "approve")} disabled={busy}>
-              Approve as the named teacher
+              Sign as yourself
             </Button>
             <Button variant="outline-solid" onClick={() => decide(openDraft.note_id, "discard")} disabled={busy}>
               Discard
             </Button>
             <Link href="/sign-in" className="self-center text-xs text-blue-600 underline dark:text-blue-400">
-              Approval requires sign-in
+              Signing requires sign-in
             </Link>
           </div>
         </div>
@@ -167,12 +173,12 @@ export default function PathwayNotePanel({ learnerId }: { learnerId: string }) {
 
       {approved.length > 0 && (
         <div className="mt-5 border-t border-gray-200 pt-4 dark:border-gray-700">
-          <p className="text-sm font-medium">Approved notes</p>
+          <p className="text-sm font-medium">Signed summaries</p>
           {approved.map((note) => (
             <div key={note.note_id} className="mt-2 text-sm">
               <p>{note.approved_text}</p>
               <p className="text-xs text-gray-500 dark:text-gray-400">
-                Approved by {note.approved_by_teacher_id} on{" "}
+                Signed by {note.approved_by_teacher_id} on{" "}
                 {note.approved_at ? new Date(note.approved_at).toLocaleDateString() : ""}. Not sent
                 by DIRA.
               </p>

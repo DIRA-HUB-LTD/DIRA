@@ -24,7 +24,7 @@ export const MIGRATIONS = [
   "db/008_hypothesis_assessments.sql",
   "db/009_agent_run_events_education_cache.sql",
   "db/010_focus_assignments.sql",
-  "db/011_pathway_notes.sql",
+  "db/011_signed_summaries.sql",
   "db/012_mcp_api_tokens.sql",
   "db/013_teacher_sign_in.sql",
 ];

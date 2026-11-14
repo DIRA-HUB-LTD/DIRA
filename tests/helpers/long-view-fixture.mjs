@@ -1,5 +1,5 @@
 // A learner (L1) with enough tested, multi-teacher, multi-term evidence for the
-// pathway gate: reviewed observations from two teachers across two academic years,
+// summary gate: reviewed observations from two teachers across two academic years,
 // plus a completed classroom test with a recorded outcome.
 import { insertObservation, isoDate, seedTwoYearSchool } from "./pglite-db.mjs";
 
@@ -65,7 +65,7 @@ export async function seedLongViewLearner(pool) {
   return { years, observationIds: ids, outcomeId, testId: "TEST-DONE" };
 }
 
-/** A model reply for the pathway note that cites real IDs. */
+/** A model reply for the signed summary that cites real IDs. */
 export function validNoteReply(observationIds, testId) {
   return JSON.stringify({
     sentences: [

@@ -31,7 +31,7 @@ import {
   assessHypothesis,
   EvidenceReasoningError,
 } from "@/lib/services/evidence-reasoning";
-import { draftPathwayNote, PathwayNoteError } from "@/lib/services/pathway-note";
+import { draftSignedSummary, SignedSummaryError } from "@/lib/services/signed-summary";
 
 function toolResult(value: unknown) {
   const text = JSON.stringify(value);
@@ -183,7 +183,7 @@ export interface DiraMcpServerOptions {
 
 /**
  * DIRA's own MCP server. No tool here can approve anything on a teacher's behalf:
- * accepting a test and approving a pathway note are teacher-only actions in the UI.
+ * accepting a test and approving a signed summary are teacher-only actions in the UI.
  */
 export function createDiraMcpServer(options: DiraMcpServerOptions = {}): McpServer {
   const resolveContext: TeacherContextResolver =
@@ -480,7 +480,7 @@ export function createDiraMcpServer(options: DiraMcpServerOptions = {}): McpServ
     {
       title: "Check what a learner's evidence supports",
       description:
-        "Deterministic, read-only check for one learner the teacher currently teaches: observation counts across years, whether an under-corroborated repeated signal can be explored with a small test, completed tests still needing a hypothesis assessment, the pathway-note evidence gate, and the actions the evidence currently allows. Call this before and after acting.",
+        "Deterministic, read-only check for one learner the teacher currently teaches: observation counts across years, whether an under-corroborated repeated signal can be explored with a small test, completed tests still needing a hypothesis assessment, the signed-summary evidence gate, and the actions the evidence currently allows. Call this before and after acting.",
       inputSchema: {
         learner_id: z.string().trim().min(1).max(200),
       },
@@ -547,9 +547,9 @@ export function createDiraMcpServer(options: DiraMcpServerOptions = {}): McpServ
   );
 
   server.registerTool(
-    "draft_pathway_note",
+    "draft_signed_summary",
     {
-      title: "Draft an early-pathway note for teacher review",
+      title: "Draft an evidence summary for a teacher to sign",
       description:
         "Only when the deterministic evidence gate is met (reviewed observations from 2+ teachers across 2+ terms and 1+ completed test): draft a short plain-language note where every sentence cites evidence, for the teacher to use when talking with the guardian. Saves a DRAFT only. A named teacher must approve it in DIRA; it is never sent anywhere automatically.",
       inputSchema: {
@@ -562,7 +562,7 @@ export function createDiraMcpServer(options: DiraMcpServerOptions = {}): McpServ
         if (!context) {
           return toolError("teacher_context_unavailable", "The teacher context is unavailable.");
         }
-        const result = await draftPathwayNote(learner_id, context, { runId: options.runId });
+        const result = await draftSignedSummary(learner_id, context, { runId: options.runId });
         if (!result.ok) return toolResult(result);
         return toolResult({
           ok: true,
@@ -574,14 +574,14 @@ export function createDiraMcpServer(options: DiraMcpServerOptions = {}): McpServ
           requires_teacher_approval: true,
         });
       } catch (error) {
-        logToolFailure("draft_pathway_note", error);
-        if (error instanceof PathwayNoteError) {
+        logToolFailure("draft_signed_summary", error);
+        if (error instanceof SignedSummaryError) {
           return toolError(error.code, error.message);
         }
         if (error instanceof EvidenceSummaryNotFoundError) {
           return toolError("learner_not_found", "The learner is not currently assigned to this teacher.");
         }
-        return toolError("pathway_note_failed", "Dira could not draft a pathway note.");
+        return toolError("signed_summary_failed", "Dira could not draft a summary to sign.");
       }
     },
   );

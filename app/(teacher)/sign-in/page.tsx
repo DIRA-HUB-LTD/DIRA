@@ -36,8 +36,8 @@ export default function SignInPage() {
       <Card className="p-6">
         <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Teacher sign-in</h1>
         <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
-          Sign in with the teacher ID and PIN from your school administrator. Approving a pathway
-          note requires a named, signed-in teacher.
+          Sign in with the teacher ID and PIN from your school administrator. Signing an evidence
+          summary requires a named, signed-in teacher.
         </p>
         <form onSubmit={submit} className="mt-6 space-y-4">
           <label className="block text-sm font-medium text-gray-800 dark:text-gray-200">

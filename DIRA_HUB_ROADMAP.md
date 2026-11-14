@@ -22,6 +22,8 @@
 
 **Decided by the founder (13 Nov 2026):** D1 same repo; D3 learner history stays at the old school unless a guardian approves an export; D9 the Fetch gateway lives on **Railway** (delete `render.yaml` later). All other recommendations in §12 are accepted.
 
+**Decided by the founder (14 Nov 2026):** the C7 "pathway note" is merged into the Evidence Card as its last section, the **signed evidence summary** (table `signed_summaries`, MCP tool `draft_signed_summary`). One concept, not two: the card is the teacher's working view; the signed summary is its cited evidence, signed by a named teacher for a family conversation, never sent by DIRA. Recorded in `docs/reference/USER_FLOWS.md` and `DATA_MODEL.md`.
+
 ---
 
 ## A. Competition alignment: "The Long View" (Education track)
@@ -90,7 +92,7 @@ Source: the official track page (`agentic-africa-challenge.lovable.app/tracks/ed
 | C4 Open weights + reusable tools | ✅ Provider switch + per-teacher MCP tokens. ⏳ **You:** record one full run on a self-hosted model | `lib/models.ts`, `lib/auth/mcp-access.ts` |
 | C5 One-command run + CI | ✅ `npm run demo`, migration runner, GitHub Actions | `scripts/demo.mjs`, `scripts/migrate.mjs`, `.github/workflows/ci.yml` |
 | C6 Honest evals | ✅ Harness, 10 tasks, repeats, variance, cost, one unfixed failure. ⏳ **You:** `npm run eval` with a model key, paste results into EVALS.md §0.4 | `evals/`, `EVALS.md` §0 |
-| C7 Pathway note + named approval | ✅ Gate, cited drafts, language guard, fail closed, PIN sign-in, approval UI | `lib/services/pathway-note.ts`, `lib/auth/teacher-session.ts` |
+| C7 Signed evidence summary (merged into the Evidence Card) + named sign-off | ✅ Gate, cited drafts, language guard, fail closed, PIN sign-in, signing UI at the foot of the card | `lib/services/signed-summary.ts`, `components/evidence/SignedSummarySection.tsx`, `lib/auth/teacher-session.ts` |
 | C8 Named-teacher evidence | ⏳ **You:** interview + timed call | `docs/TEACHER_EVIDENCE.md` |
 | C9 Run timeline + cost | ✅ | `lib/agent/run-summary.ts`, `/agent-logs?run_id=` |
 | C10 Demo | ✅ Script written. ⏳ **You:** record | `docs/DEMO_SCRIPT.md` |

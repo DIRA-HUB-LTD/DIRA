@@ -3,10 +3,10 @@ import { z } from "zod/v4";
 import { isSameOriginRequest } from "@/lib/auth/same-origin";
 import { getSignedInTeacher } from "@/lib/auth/teacher-session";
 import {
-  approvePathwayNote,
-  discardPathwayNote,
-  PathwayNoteError,
-} from "@/lib/services/pathway-note";
+  approveSignedSummary,
+  discardSignedSummary,
+  SignedSummaryError,
+} from "@/lib/services/signed-summary";
 
 export const runtime = "nodejs";
 
@@ -30,7 +30,7 @@ export async function POST(
   const teacher = await getSignedInTeacher();
   if (!teacher) {
     return NextResponse.json(
-      { error: "Sign in as a named teacher to approve or discard a pathway note.", code: "sign_in_required" },
+      { error: "Sign in as a named teacher to approve or discard a signed summary.", code: "sign_in_required" },
       { status: 401 },
     );
   }
@@ -45,16 +45,16 @@ export async function POST(
   const { learnerId, noteId } = await params;
   try {
     if (parsed.data.action === "approve") {
-      const note = await approvePathwayNote(noteId, learnerId, teacher, parsed.data.text);
+      const note = await approveSignedSummary(noteId, learnerId, teacher, parsed.data.text);
       return NextResponse.json({ note, approved_by: teacher.display_name });
     }
-    await discardPathwayNote(noteId, learnerId, teacher);
+    await discardSignedSummary(noteId, learnerId, teacher);
     return NextResponse.json({ discarded: true });
   } catch (error) {
-    if (error instanceof PathwayNoteError) {
+    if (error instanceof SignedSummaryError) {
       return NextResponse.json({ error: error.message, code: error.code }, { status: error.httpStatus });
     }
-    console.error("Pathway note decision failed", {
+    console.error("Signed summary decision failed", {
       errorName: error instanceof Error ? error.name : "UnknownError",
     });
     return NextResponse.json({ error: "The decision could not be saved" }, { status: 500 });

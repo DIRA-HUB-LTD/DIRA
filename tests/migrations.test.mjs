@@ -26,7 +26,7 @@ describe("migration runner", () => {
     for (const table of [
       "education_markdown_cache",
       "focus_assignments",
-      "pathway_notes",
+      "signed_summaries",
       "mcp_api_tokens",
       "teacher_sign_in_attempts",
     ]) {

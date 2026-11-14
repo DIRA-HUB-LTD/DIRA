@@ -11,7 +11,7 @@ import { getSignedInTeacher } from "@/lib/auth/teacher-session";
  * 2. Otherwise, in development or DIRA_DEMO_MODE only, the first teacher in the
  *    database (the single-teacher demo; unchanged from before).
  *
- * Consequential actions (approving a pathway note) must NOT use this function,
+ * Consequential actions (approving a signed summary) must NOT use this function,
  * because of the demo fallback. They call getSignedInTeacher() directly.
  */
 export async function resolveTeacherContext(): Promise<LogObservationContext | null> {

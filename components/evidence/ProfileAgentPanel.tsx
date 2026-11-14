@@ -25,7 +25,7 @@ const TOOL_LABEL: Record<string, string> = {
   retrieve_education_resources: "Looked up approved education guidance",
   suggest_test: "Suggested a small classroom test",
   assess_test_outcome: "Compared a test outcome with its hypothesis",
-  draft_pathway_note: "Drafted a pathway note for your review",
+  draft_signed_summary: "Drafted a summary for you to review and sign",
 };
 
 const STATUS_STYLE: Record<AgentAction["status"], string> = {
