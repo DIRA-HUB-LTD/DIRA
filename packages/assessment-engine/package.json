@@ -1,0 +1,13 @@
+{
+  "name": "@dira/assessment-engine",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Pure, domain-neutral evidence logic shared by DIRA and Dira Kazi: corroboration, citation and excerpt checks, validated generation, idempotency fingerprints. No Next.js, no database, no environment reads.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "sideEffects": false
+}

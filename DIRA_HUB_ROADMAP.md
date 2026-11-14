@@ -462,6 +462,8 @@ flowchart LR
 | **P7 DIRA for Teachers** | §9: sign-up, personal workspace, Keeper.sh link, event-series mapping, guardian consent | A tutor goes from sign-up to receiving their first post-session call | L |
 | **Kazi MVP** | `apps/kazi` on the engine (§10) | Separate repo plan | — |
 
+**P1 progress (14 Nov 2026, branch `feature/long-view-readiness`):** the workspace `packages/assessment-engine` exists (23 tests, isolation guard). Characterization snapshots (`tests/engine-characterization.test.mjs`) were recorded first and pass unchanged after the move. **Moved:** `corroborate` / `groupByCategory` (with `CorroborationConfig`), `fingerprint`, `validateCitations`, `verifyExcerpt`, `generateValidated`. **Adopted by DIRA:** `suggestTest.ts` (corroboration, fingerprint), `signed-summary.ts` (retry loop, citations), `call-observations.ts` (quote check). **Not yet:** the evidence-reasoning retry loop and the Suggest Test graph's validate node (both still have their own retry code; P6), the engine types and ports (`EvidenceStore`, `ModelPort`, ...), `runProposer`.
+
 **Smallest useful first slice (about 1 week, on a fork or branch per §A.1):** C3 (Fetch working) + C5 (one-command run) + C2 (the cross-year fix). Judges can then clone the project, the borrowed MCP works, and the "long view" is visible across 2025 → 2026. **Next most valuable:** C1 + C7 (the real agent and the approval gate). Together they move the 30-point criterion and the sub-theme.
 
 ---

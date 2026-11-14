@@ -43,6 +43,7 @@ export default defineConfig({
       "tests/run-summary.test.mjs",
       "tests/education-sources.test.mjs",
       "tests/engine-characterization.test.mjs",
+      "packages/assessment-engine/tests/engine.test.mjs",
     ],
     fileParallelism: false,
     testTimeout: 60_000,

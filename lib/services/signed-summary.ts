@@ -3,6 +3,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
 import { z } from "zod/v4";
+import { generateValidated, GenerationFailedError, validateCitations } from "@dira/assessment-engine";
 import { createRunId, logAgentEvent } from "@/lib/agent/logger";
 import { teacherCurrentlyTeachesLearnerSql } from "@/lib/auth/learner-visibility";
 import { getPool } from "@/lib/db/client";
@@ -131,6 +132,16 @@ const noteSchema = z.object({
 });
 export type SignedSummaryContent = z.infer<typeof noteSchema>;
 
+/** Citation problems for model output whose citations may not even be strings. */
+function citationProblemsFor(path: string, citations: unknown[], allowedIds: Set<string>): string[] {
+  const strings = citations.filter((citation): citation is string => typeof citation === "string");
+  const notStrings = citations.filter((citation) => typeof citation !== "string");
+  return [
+    ...validateCitations([{ path, citations: strings }], allowedIds),
+    ...notStrings.map((citation) => `${path}: "${String(citation)}" is not one of the allowed evidence IDs`),
+  ];
+}
+
 /** Validate a model draft against the allowed evidence IDs and the language guard. */
 export function validateNoteContent(value: unknown, allowedIds: Set<string>): {
   ok: true;
@@ -148,9 +159,7 @@ export function validateNoteContent(value: unknown, allowedIds: Set<string>): {
         typeof sentence === "object" && sentence !== null && Array.isArray((sentence as { citations?: unknown }).citations)
           ? (sentence as { citations: unknown[] }).citations
           : [];
-      return citations
-        .filter((citation) => typeof citation !== "string" || !allowedIds.has(citation))
-        .map((citation) => `sentences.${index}.citations: "${String(citation)}" is not one of the allowed evidence IDs`);
+      return citationProblemsFor(`sentences.${index}.citations`, citations, allowedIds);
     });
     return {
       ok: false,
@@ -162,11 +171,9 @@ export function validateNoteContent(value: unknown, allowedIds: Set<string>): {
   }
   const problems: string[] = [];
   parsed.data.sentences.forEach((sentence, index) => {
-    for (const citation of sentence.citations) {
-      if (!allowedIds.has(citation)) {
-        problems.push(`sentences.${index}.citations: "${citation}" is not one of the allowed evidence IDs`);
-      }
-    }
+    problems.push(
+      ...validateCitations([{ path: `sentences.${index}.citations`, citations: sentence.citations }], allowedIds),
+    );
     for (const reason of findLanguageProblems(sentence.text)) {
       problems.push(`sentences.${index}.text ${reason}; describe observed actions instead`);
     }
@@ -347,46 +354,53 @@ export async function draftSignedSummary(
     ...completedTests.map((test) => test.test_id),
   ]);
   const messages = buildMessages(snapshot.learner.display_name, eligibleObservations, completedTests);
-  let content: SignedSummaryContent | null = null;
-  let problems: string[] = [];
-  for (let attempt = 1; attempt <= 2 && !content; attempt += 1) {
-    const completion = await createAgentCompletion(
-      problems.length
-        ? [
-            ...messages,
-            {
-              role: "user",
-              content: `Correct the previous response. Problems: ${problems.join("; ")}. Return only the JSON object.`,
-            },
-          ]
-        : messages,
-      [],
-      { runId, workflow: WORKFLOW, attempt },
-    );
-    const validation = validateNoteContent(parseJson(completion.content), allowedIds);
-    if (validation.ok) {
-      content = validation.content;
-    } else {
-      problems = validation.problems.slice(0, 12);
-      await logAgentEvent({
-        run_id: runId,
-        workflow: WORKFLOW,
-        attempt,
-        event_type: "tool_event",
-        agent_action: "signed_summary_validation_failed",
-        tool_name: "draft_signed_summary",
-        status: "error",
-        error: "invalid_model_output",
-        metadata: { problems },
-      });
+  let content: SignedSummaryContent;
+  try {
+    content = await generateValidated({
+      generate: async ({ attempt, previousProblems }) => {
+        const completion = await createAgentCompletion(
+          previousProblems.length
+            ? [
+                ...messages,
+                {
+                  role: "user",
+                  content: `Correct the previous response. Problems: ${previousProblems.join("; ")}. Return only the JSON object.`,
+                },
+              ]
+            : messages,
+          [],
+          { runId, workflow: WORKFLOW, attempt },
+        );
+        return completion.content;
+      },
+      validate: (raw) => {
+        const validation = validateNoteContent(parseJson(raw), allowedIds);
+        return validation.ok
+          ? { ok: true, value: validation.content }
+          : { ok: false, problems: validation.problems.slice(0, 12) };
+      },
+      onInvalid: ({ attempt, problems }) =>
+        logAgentEvent({
+          run_id: runId,
+          workflow: WORKFLOW,
+          attempt,
+          event_type: "tool_event",
+          agent_action: "signed_summary_validation_failed",
+          tool_name: "draft_signed_summary",
+          status: "error",
+          error: "invalid_model_output",
+          metadata: { problems },
+        }),
+    });
+  } catch (error) {
+    if (error instanceof GenerationFailedError) {
+      throw new SignedSummaryError(
+        "validation_failed",
+        "The model could not produce a fully cited, non-labelling note after one correction. Nothing was saved.",
+        502,
+      );
     }
-  }
-  if (!content) {
-    throw new SignedSummaryError(
-      "validation_failed",
-      "The model could not produce a fully cited, non-labelling note after one correction. Nothing was saved.",
-      502,
-    );
+    throw error;
   }
 
   const citedIds = [...new Set(content.sentences.flatMap((sentence) => sentence.citations))];
