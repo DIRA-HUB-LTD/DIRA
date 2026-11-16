@@ -1,0 +1,23 @@
+teacher_email,grade,stream,weekday,period,start,end,subject
+grace.wanjiku@kilimani-primary.example,Grade 4,A,Mon,1,08:00,08:40,Mathematics
+grace.wanjiku@kilimani-primary.example,Grade 4,A,Wed,1,08:00,08:40,Mathematics
+grace.wanjiku@kilimani-primary.example,Grade 4,A,Fri,1,08:00,08:40,Mathematics
+grace.wanjiku@kilimani-primary.example,Grade 4,B,Tue,1,08:00,08:40,Mathematics
+grace.wanjiku@kilimani-primary.example,Grade 4,B,Thu,1,08:00,08:40,Mathematics
+peter.odhiambo@kilimani-primary.example,Grade 4,A,Mon,2,08:40,09:20,English
+peter.odhiambo@kilimani-primary.example,Grade 4,A,Thu,2,08:40,09:20,English
+peter.odhiambo@kilimani-primary.example,Grade 4,B,Tue,2,08:40,09:20,English
+peter.odhiambo@kilimani-primary.example,Grade 4,B,Fri,2,08:40,09:20,English
+faith.chebet@kilimani-primary.example,Grade 4,A,Tue,3,09:20,10:00,Kiswahili
+faith.chebet@kilimani-primary.example,Grade 4,B,Wed,3,09:20,10:00,Kiswahili
+faith.chebet@kilimani-primary.example,Grade 5,A,Mon,1,08:00,08:40,Kiswahili
+faith.chebet@kilimani-primary.example,Grade 5,B,Tue,1,08:00,08:40,Kiswahili
+samuel.mutua@kilimani-primary.example,Grade 5,A,Mon,2,08:40,09:20,Mathematics
+samuel.mutua@kilimani-primary.example,Grade 5,A,Wed,2,08:40,09:20,Mathematics
+samuel.mutua@kilimani-primary.example,Grade 5,A,Fri,2,08:40,09:20,Mathematics
+samuel.mutua@kilimani-primary.example,Grade 5,B,Tue,2,08:40,09:20,Mathematics
+samuel.mutua@kilimani-primary.example,Grade 5,B,Thu,2,08:40,09:20,Mathematics
+peter.odhiambo@kilimani-primary.example,Grade 5,A,Tue,3,09:20,10:00,English
+peter.odhiambo@kilimani-primary.example,Grade 5,B,Wed,3,09:20,10:00,English
+grace.wanjiku@kilimani-primary.example,Grade 5,A,Thu,3,09:20,10:00,Science and Technology
+grace.wanjiku@kilimani-primary.example,Grade 5,B,Fri,3,09:20,10:00,Science and Technology

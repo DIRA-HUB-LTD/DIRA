@@ -89,16 +89,31 @@ export default function SchoolImportCard({ alreadyImported }: { alreadyImported:
                 Download template
               </a>
             </div>
-            <input
-              id={`file-${sheet.name}`}
-              type="file"
-              accept=".csv,text/csv"
-              className="mt-1 block w-full text-sm"
-              onChange={(event) => {
-                setResult(null);
-                setFiles((current) => ({ ...current, [sheet.name]: event.target.files?.[0] }));
-              }}
-            />
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              <label
+                htmlFor={`file-${sheet.name}`}
+                className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-dira-teal bg-white px-3 py-1.5 text-sm font-medium text-dira-teal shadow-sm hover:bg-dira-cream focus-within:ring-2 focus-within:ring-dira-amber dark:bg-gray-900 dark:hover:bg-gray-800"
+              >
+                <svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4" fill="currentColor">
+                  <path d="M10 3a1 1 0 0 1 1 1v6.586l1.293-1.293a1 1 0 1 1 1.414 1.414l-3 3a1 1 0 0 1-1.414 0l-3-3a1 1 0 1 1 1.414-1.414L9 10.586V4a1 1 0 0 1 1-1Z" />
+                  <path d="M4 13a1 1 0 0 1 1 1v1h10v-1a1 1 0 1 1 2 0v2a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1v-2a1 1 0 0 1 1-1Z" />
+                </svg>
+                {files[sheet.name] ? "Change file" : "Choose file"}
+                <input
+                  id={`file-${sheet.name}`}
+                  type="file"
+                  accept=".csv,text/csv"
+                  className="sr-only"
+                  onChange={(event) => {
+                    setResult(null);
+                    setFiles((current) => ({ ...current, [sheet.name]: event.target.files?.[0] }));
+                  }}
+                />
+              </label>
+              <span className="text-sm text-gray-600 dark:text-gray-300">
+                {files[sheet.name]?.name ?? "No file chosen"}
+              </span>
+            </div>
           </li>
         ))}
       </ul>
