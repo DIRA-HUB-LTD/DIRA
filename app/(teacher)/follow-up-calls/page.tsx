@@ -8,7 +8,7 @@ import { getPool } from "@/lib/db/client";
 import { resolveTeacherContext } from "@/lib/auth/teacher-context";
 import { getSignedInTeacher } from "@/lib/auth/teacher-session";
 import { dispatchOneDueFollowUp } from "@/lib/services/follow-up-dispatch";
-import { queueManualDemoFollowUp } from "@/lib/services/follow-up-queue";
+import { prepareDailyFollowUpQueue, queueManualDemoFollowUp } from "@/lib/services/follow-up-queue";
 import {
   getVoiceDemoDestination,
   isE164,
@@ -95,6 +95,57 @@ function safeErrorLabel(code: string | null): string | null {
   return code ? "A dispatch error was recorded; contact the administrator" : null;
 }
 
+/**
+ * Administrator: build (or refresh) today's call queue for this school from the timetable.
+ * Queueing never places a call; the scheduler dispatches each one when its lesson ends.
+ */
+async function queueTodaysCallsAction() {
+  "use server";
+  const admin = await getSignedInTeacher();
+  if (!admin || admin.role !== "admin") {
+    redirect("/follow-up-calls?queued=forbidden");
+  }
+  let outcome = "error";
+  try {
+    const result = await prepareDailyFollowUpQueue(new Date(), admin.school_id);
+    const school = result.schools[0];
+    if (!school) outcome = "error";
+    else if (school.blocked_reason) outcome = "blocked";
+    else if (school.skipped_reason) outcome = school.skipped_reason;
+    else outcome = `ok:${school.queued}:${school.refreshed}`;
+  } catch (error) {
+    console.error("Could not queue today's calls", {
+      errorName: error instanceof Error ? error.name : "UnknownError",
+    });
+  }
+  revalidatePath("/follow-up-calls");
+  redirect(`/follow-up-calls?queued=${encodeURIComponent(outcome)}`);
+}
+
+function describeQueueOutcome(outcome: string): string {
+  if (outcome.startsWith("ok:")) {
+    const [, queued, refreshed] = outcome.split(":");
+    const n = Number(queued);
+    const r = Number(refreshed);
+    if (n === 0 && r === 0) {
+      return "No lessons found for today. Check the timetable, or that it is a school day.";
+    }
+    return `${n} call${n === 1 ? "" : "s"} queued${r > 0 ? ` and ${r} refreshed` : ""}. Each one is placed when its lesson ends.`;
+  }
+  switch (outcome) {
+    case "weekend":
+      return "Today is a weekend, so no calls were queued.";
+    case "school_closed":
+      return "The school calendar says the school is closed today, so no calls were queued.";
+    case "blocked":
+      return "The school has no timezone configured, so calls cannot be scheduled.";
+    case "forbidden":
+      return "Only a school administrator can queue calls.";
+    default:
+      return "Today's calls could not be queued. Try again, or check the server log.";
+  }
+}
+
 /** Queue an immediate demo-only job; it does not call the phone. */
 async function queueDemoCallAction() {
   "use server";
@@ -145,9 +196,10 @@ async function dispatchDemoCallAction(formData: FormData) {
 export default async function FollowUpCallsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ demoCall?: string }>;
+  searchParams: Promise<{ demoCall?: string; queued?: string }>;
 }) {
-  const { demoCall } = await searchParams;
+  const { demoCall, queued } = await searchParams;
+  const signedIn = await getSignedInTeacher();
   await connection();
 
 
@@ -244,7 +296,7 @@ export default async function FollowUpCallsPage({
           <p className="mt-1 text-gray-600 dark:text-gray-300">
             Call requests and observations awaiting review for {teacherResult.rows[0].display_name}.
           </p>
-          {!(await getSignedInTeacher()) && (
+          {!signedIn && (
             <p className="mt-2 text-xs text-amber-800 dark:text-amber-300">
               Development view: this first-recorded teacher context is not a sign-in session.
             </p>
@@ -255,6 +307,41 @@ export default async function FollowUpCallsPage({
         </header>
 
         {isProductionPublicDemoVoiceEnabled() && <DemoCallDialog />}
+
+        {queued && (
+          <Card
+            className={`border p-4 text-sm ${
+              queued.startsWith("ok:")
+                ? "border-green-300 text-green-900 dark:border-green-800 dark:text-green-200"
+                : "border-amber-300 text-amber-900 dark:border-amber-800 dark:text-amber-200"
+            }`}
+            role="status"
+          >
+            {describeQueueOutcome(queued)}
+          </Card>
+        )}
+
+        {signedIn?.role === "admin" && (
+          <Card className="space-y-3 border border-dira-teal/40 p-5">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+              Queue today&apos;s calls
+            </h2>
+            <p className="text-sm text-gray-700 dark:text-gray-300">
+              Builds today&apos;s list of after-lesson calls for every teacher in your school from
+              the timetable. Nothing is dialled now: DIRA places each call when that lesson ends,
+              only to teachers with a phone number and consent on record. Safe to click again; it
+              refreshes the list rather than duplicating it.
+            </p>
+            <form action={queueTodaysCallsAction}>
+              <button
+                type="submit"
+                className="rounded-md bg-dira-teal px-4 py-2 text-sm font-medium text-white hover:bg-dira-teal-deep"
+              >
+                Queue today&apos;s calls
+              </button>
+            </form>
+          </Card>
+        )}
 
         {demoCall && (
           <Card className="border border-blue-300 p-4 text-sm text-blue-900 dark:border-blue-800 dark:text-blue-200" role="status">
