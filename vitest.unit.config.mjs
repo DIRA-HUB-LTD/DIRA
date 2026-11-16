@@ -40,6 +40,7 @@ export default defineConfig({
       "tests/calendar-connection.test.mjs",
       "tests/sso-sign-in.test.mjs",
       "tests/demo-access.test.mjs",
+      "tests/queue-from-timetable.test.mjs",
       "tests/mcp-access.test.mjs",
       "tests/mcp-tools-inventory.test.mjs",
       "tests/signed-summary.test.mjs",
