@@ -8,7 +8,12 @@ import { getPool } from "@/lib/db/client";
 import { resolveTeacherContext } from "@/lib/auth/teacher-context";
 import { getSignedInTeacher } from "@/lib/auth/teacher-session";
 import { dispatchOneDueFollowUp } from "@/lib/services/follow-up-dispatch";
-import { prepareDailyFollowUpQueue, queueManualDemoFollowUp } from "@/lib/services/follow-up-queue";
+import {
+  confirmSchoolOpenDays,
+  prepareDailyFollowUpQueue,
+  queueManualDemoFollowUp,
+  schoolDaysAreConfirmed,
+} from "@/lib/services/follow-up-queue";
 import {
   getVoiceDemoDestination,
   isE164,
@@ -99,7 +104,7 @@ function safeErrorLabel(code: string | null): string | null {
  * Administrator: build (or refresh) today's call queue for this school from the timetable.
  * Queueing never places a call; the scheduler dispatches each one when its lesson ends.
  */
-async function queueTodaysCallsAction() {
+async function queueTodaysCallsAction(formData: FormData) {
   "use server";
   const admin = await getSignedInTeacher();
   if (!admin || admin.role !== "admin") {
@@ -107,12 +112,27 @@ async function queueTodaysCallsAction() {
   }
   let outcome = "error";
   try {
-    const result = await prepareDailyFollowUpQueue(new Date(), admin.school_id);
-    const school = result.schools[0];
-    if (!school) outcome = "error";
-    else if (school.blocked_reason) outcome = "blocked";
-    else if (school.skipped_reason) outcome = school.skipped_reason;
-    else outcome = `ok:${school.queued}:${school.refreshed}`;
+    // Calls are only placed on days an administrator has vouched the school is open.
+    const days = await getPool().query<{ today: string; month_end: string }>(
+      `SELECT (now() AT TIME ZONE timezone)::date::text AS today,
+              (date_trunc('month', now() AT TIME ZONE timezone) + interval '1 month - 1 day')::date::text AS month_end
+       FROM schools WHERE school_id = $1 AND timezone IS NOT NULL`,
+      [admin.school_id],
+    );
+    const range = days.rows[0];
+    if (range && formData.get("confirm_open") === "on") {
+      await confirmSchoolOpenDays(admin.school_id, range.today, range.month_end);
+    }
+    if (range && !(await schoolDaysAreConfirmed(admin.school_id, range.today))) {
+      outcome = "unconfirmed";
+    } else {
+      const result = await prepareDailyFollowUpQueue(new Date(), admin.school_id);
+      const school = result.schools[0];
+      if (!school) outcome = "error";
+      else if (school.blocked_reason) outcome = "blocked";
+      else if (school.skipped_reason) outcome = school.skipped_reason;
+      else outcome = `ok:${school.queued}:${school.refreshed}`;
+    }
   } catch (error) {
     console.error("Could not queue today's calls", {
       errorName: error instanceof Error ? error.name : "UnknownError",
@@ -137,8 +157,10 @@ function describeQueueOutcome(outcome: string): string {
       return "Today is a weekend, so no calls were queued.";
     case "school_closed":
       return "The school calendar says the school is closed today, so no calls were queued.";
+    case "unconfirmed":
+      return "Tick the box to confirm the school is open as normal, then queue again. DIRA only places calls on days you have confirmed.";
     case "blocked":
-      return "The school has no timezone configured, so calls cannot be scheduled.";
+      return "The school has no valid timezone configured, so calls cannot be scheduled.";
     case "forbidden":
       return "Only a school administrator can queue calls.";
     default:
@@ -332,7 +354,14 @@ export default async function FollowUpCallsPage({
               only to teachers with a phone number and consent on record. Safe to click again; it
               refreshes the list rather than duplicating it.
             </p>
-            <form action={queueTodaysCallsAction}>
+            <form action={queueTodaysCallsAction} className="space-y-3">
+              <label className="flex items-start gap-2 text-sm text-gray-800 dark:text-gray-200">
+                <input type="checkbox" name="confirm_open" className="mt-1" />
+                <span>
+                  I confirm the school is open as normal on weekdays from today to the end of this
+                  month. DIRA only places calls on days you have confirmed.
+                </span>
+              </label>
               <button
                 type="submit"
                 className="rounded-md bg-dira-teal px-4 py-2 text-sm font-medium text-white hover:bg-dira-teal-deep"

@@ -145,6 +145,41 @@ export async function prepareDailyFollowUpQueue(
   return { generated_at: now.toISOString(), schools };
 }
 
+/**
+ * An administrator's statement that the school is open as normal on weekdays from
+ * `from` to `to` (inclusive). The queue and the dispatcher both refuse to work for a
+ * date no confirmed range covers, so a school is never phoned on a day nobody vouched
+ * for. Closure dates (public holidays) inside a range are cancelled separately through
+ * school_closures. Idempotent.
+ */
+export async function confirmSchoolOpenDays(
+  schoolId: string,
+  from: string,
+  to: string,
+): Promise<void> {
+  await getPool().query(
+    `INSERT INTO school_closure_coverage (school_id, coverage_start, coverage_end, confirmed_at)
+     VALUES ($1, $2::date, $3::date, NOW())
+     ON CONFLICT (school_id, coverage_start, coverage_end) DO NOTHING`,
+    [schoolId, from, to],
+  );
+}
+
+/** True when a confirmed range already covers this date for the school. */
+export async function schoolDaysAreConfirmed(
+  schoolId: string,
+  date: string,
+): Promise<boolean> {
+  const result = await getPool().query(
+    `SELECT 1 FROM school_closure_coverage
+     WHERE school_id = $1 AND coverage_start <= $2::date AND coverage_end >= $2::date
+       AND confirmed_at IS NOT NULL
+     LIMIT 1`,
+    [schoolId, date],
+  );
+  return (result.rowCount ?? 0) > 0;
+}
+
 export interface DueFollowUp {
   follow_up_job_id: string;
   scheduled_date: string;
@@ -347,6 +382,36 @@ async function prepareSchoolQueue(
         skipped_reason: "school_closed",
       };
     }
+
+    // A timetable says "Grade 4A has maths on Mondays"; the queue works from dated
+    // calendar entries. Datasets that arrive with a pre-built calendar already have them;
+    // schools that upload a timetable do not, so create today's entries from it. Existing
+    // entries (and cancelled ones) are never touched.
+    await client.query(
+      `INSERT INTO school_calendar (
+         calendar_entry_id, school_id, class_id, teacher_id, timetable_assignment_id,
+         calendar_date, academic_year, term, weekday, period_number,
+         start_time, end_time, subject
+       )
+       SELECT
+         'CAL-' || md5(ta.timetable_assignment_id || ':' || $2::text),
+         ta.school_id, ta.class_id, ta.teacher_id, ta.timetable_assignment_id,
+         $2::date, ta.academic_year,
+         CASE
+           WHEN EXTRACT(MONTH FROM $2::date) <= 4 THEN 'Term 1'
+           WHEN EXTRACT(MONTH FROM $2::date) <= 8 THEN 'Term 2'
+           ELSE 'Term 3'
+         END,
+         ta.weekday, ta.period_number, ta.start_time, ta.end_time, ta.subject
+       FROM timetable_assignments AS ta
+       WHERE ta.school_id = $1
+         AND ta.weekday = EXTRACT(ISODOW FROM $2::date)::smallint
+         AND ta.academic_year = EXTRACT(YEAR FROM $2::date)::int
+         AND ta.valid_from <= $2::date
+         AND (ta.valid_to IS NULL OR ta.valid_to >= $2::date)
+       ON CONFLICT DO NOTHING`,
+      [school.school_id, localDate],
+    );
 
     const candidates = await client.query<ScheduleCandidate>(
       VALID_SCHEDULE_SQL,
