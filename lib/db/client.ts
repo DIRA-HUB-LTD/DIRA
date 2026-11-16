@@ -15,16 +15,23 @@ export const getPool = (): Pool => {
 
   if (pool) return pool;
 
-  const connectionString = process.env.DATABASE_URL;
+  // DATABASE_POOL_URL, when set, is what the running app uses (a transaction-mode
+  // pooler such as Supabase's port 6543, which shares few server connections among
+  // many serverless instances). DATABASE_URL stays the direct/session string that
+  // migrations and scripts need. Nothing here uses session state, so both work.
+  const connectionString = process.env.DATABASE_POOL_URL?.trim() || process.env.DATABASE_URL;
   if (!connectionString) {
     throw new Error("DATABASE_URL is not configured");
   }
 
+  const configuredMax = Number(process.env.DIRA_DB_POOL_MAX);
+  const production = process.env.NODE_ENV === "production";
   pool = new Pool({
     connectionString,
-    max: 10,
-    idleTimeoutMillis: 30_000,
-    connectionTimeoutMillis: 5_000,
+    // Each serverless instance keeps few connections; a session pooler allows ~15 in total.
+    max: Number.isInteger(configuredMax) && configuredMax > 0 ? configuredMax : production ? 3 : 10,
+    idleTimeoutMillis: production ? 10_000 : 30_000,
+    connectionTimeoutMillis: 8_000,
   });
 
   // Optional: cache in development for hot reloading
