@@ -5,6 +5,7 @@ import SignInStatus from "@/components/auth/SignInStatus";
 const navigation = [
   { name: "This Week", href: "/this-week", current: false },
   { name: "Follow-up Activity", href: "/follow-up-calls", current: false },
+  { name: "Call Drafts", href: "/call-drafts", current: false },
   { name: "Learners", href: "/learners", current: false },
   { name: "Try This", href: "/try-this/demo", current: false },
   { name: "Evidence", href: "/evidence/demo", current: false },

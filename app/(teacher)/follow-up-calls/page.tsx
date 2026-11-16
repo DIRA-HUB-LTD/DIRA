@@ -6,6 +6,7 @@ import Badge from "@/components/ui/Badge";
 import Card from "@/components/ui/Card";
 import { getPool } from "@/lib/db/client";
 import { resolveTeacherContext } from "@/lib/auth/teacher-context";
+import { getSignedInTeacher } from "@/lib/auth/teacher-session";
 import { dispatchOneDueFollowUp } from "@/lib/services/follow-up-dispatch";
 import { queueManualDemoFollowUp } from "@/lib/services/follow-up-queue";
 import {
@@ -243,9 +244,11 @@ export default async function FollowUpCallsPage({
           <p className="mt-1 text-gray-600 dark:text-gray-300">
             Call requests and observations awaiting review for {teacherResult.rows[0].display_name}.
           </p>
-          <p className="mt-2 text-xs text-amber-800 dark:text-amber-300">
-            Single-teacher demo view: this first-recorded teacher context is not a sign-in session.
-          </p>
+          {!(await getSignedInTeacher()) && (
+            <p className="mt-2 text-xs text-amber-800 dark:text-amber-300">
+              Development view: this first-recorded teacher context is not a sign-in session.
+            </p>
+          )}
           <Link href="/call-drafts" className="mt-2 inline-block text-sm text-blue-600 underline">
             Review phone-call observation drafts
           </Link>

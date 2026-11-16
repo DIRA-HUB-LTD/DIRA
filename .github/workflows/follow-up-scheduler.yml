@@ -1,0 +1,72 @@
+name: Follow-up scheduler
+
+# Drives the after-lesson call pipeline on the deployed app. Vercel has no always-on
+# process, so this workflow is the "hosting scheduler" the internal routes expect.
+#   every 5 minutes      dispatch calls that are due (one per request, up to 5) and
+#                        process pending call recordings into observation drafts
+#   04:00 UTC, Mon-Fri   07:00 Nairobi: prepare today's queue from each school's timetable
+# Needs a repository secret FOLLOW_UP_SCHEDULER_SECRET (same value as on Vercel) and a
+# repository variable DIRA_BASE_URL (e.g. https://www.dirahub.org). GitHub may delay
+# scheduled runs by a few minutes under load.
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+    - cron: "0 4 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      job:
+        description: Which job to run now
+        type: choice
+        options: [dispatch, recordings, queue]
+        default: dispatch
+
+permissions: {}
+
+concurrency:
+  group: follow-up-scheduler
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    if: ${{ vars.DIRA_BASE_URL != '' }}
+    timeout-minutes: 5
+    env:
+      BASE_URL: ${{ vars.DIRA_BASE_URL }}
+      SECRET: ${{ secrets.FOLLOW_UP_SCHEDULER_SECRET }}
+    steps:
+      - name: Decide which jobs to run
+        id: plan
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "jobs=${{ inputs.job }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event.schedule }}" = "0 4 * * 1-5" ]; then
+            echo "jobs=queue" >> "$GITHUB_OUTPUT"
+          else
+            echo "jobs=dispatch recordings" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Call the internal routes
+        run: |
+          set -u
+          call() {
+            curl -sS -m 60 -X POST -H "Authorization: Bearer $SECRET" \
+              -o /tmp/body -w "%{http_code}" "$BASE_URL/api/internal/$1"
+          }
+          for job in ${{ steps.plan.outputs.jobs }}; do
+            case "$job" in
+              queue)
+                status=$(call follow-up-queue); echo "queue -> $status $(cut -c1-300 /tmp/body)";;
+              recordings)
+                status=$(call call-recordings); echo "recordings -> $status $(cut -c1-300 /tmp/body)";;
+              dispatch)
+                # One due call per request; stop when nothing is due ("null") or on an error.
+                for attempt in 1 2 3 4 5; do
+                  status=$(call follow-up-dispatch)
+                  echo "dispatch #$attempt -> $status $(cut -c1-300 /tmp/body)"
+                  [ "$status" = "200" ] || break
+                  [ "$(cat /tmp/body)" != "null" ] || break
+                done;;
+            esac
+          done
