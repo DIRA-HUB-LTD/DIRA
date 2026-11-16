@@ -295,6 +295,106 @@ export async function queueManualDemoFollowUp(
   return raced.rows[0];
 }
 
+/** Why a demo-workspace call could not be placed; `code` is shown to the teacher. */
+export class DemoCallError extends Error {
+  constructor(
+    public readonly code: "disabled" | "not_demo" | "no_phone" | "too_soon" | "daily_limit" | "no_class",
+    message: string,
+  ) {
+    super(message);
+    this.name = "DemoCallError";
+  }
+}
+
+const DEMO_CALL_COOLDOWN_MINUTES = 3;
+const DEMO_CALL_DAILY_LIMIT = 20;
+
+/**
+ * "Call me now" in the synthetic demo workspace: queues one manual job that the
+ * signed-in teacher then dispatches to the phone on their own record. It works in real
+ * mode but only for a workspace flagged is_demo, only for a teacher with a stored phone
+ * and consent, and it is rate-limited (the demo workspace is open to anyone who clicks
+ * Explore with synthetic data). Set DIRA_DEMO_WORKSPACE_CALLS=false to switch it off.
+ */
+export async function queueDemoWorkspaceCall(
+  context: LogObservationContext,
+  now: Date = new Date(),
+): Promise<ManualDemoFollowUp> {
+  if (process.env.DIRA_DEMO_WORKSPACE_CALLS === "false") {
+    throw new DemoCallError("disabled", "Demo calls are switched off");
+  }
+  const gate = await getPool().query<{
+    timezone: string | null;
+    class_id: string | null;
+    is_demo: boolean;
+    has_contact: boolean;
+    recent: number;
+    today: number;
+  }>(
+    `SELECT school.timezone, school.is_demo, class.class_id,
+            (teacher.phone_e164 IS NOT NULL AND teacher.voice_consent_at IS NOT NULL) AS has_contact,
+            (SELECT COUNT(*)::int FROM teacher_follow_up_jobs j
+              WHERE j.school_id = school.school_id AND j.is_manual_demo = TRUE
+                AND j.created_at > $3::timestamptz - make_interval(mins => $4::int)) AS recent,
+            (SELECT COUNT(*)::int FROM teacher_follow_up_jobs j
+              WHERE j.school_id = school.school_id AND j.is_manual_demo = TRUE
+                AND j.created_at > $3::timestamptz - interval '24 hours') AS today
+       FROM schools AS school
+       JOIN teachers AS teacher
+         ON teacher.school_id = school.school_id AND teacher.teacher_id = $2
+       LEFT JOIN LATERAL (
+         SELECT class_id FROM classes WHERE school_id = school.school_id ORDER BY class_id LIMIT 1
+       ) AS class ON TRUE
+      WHERE school.school_id = $1`,
+    [context.school_id, context.teacher_id, now, DEMO_CALL_COOLDOWN_MINUTES],
+  );
+  const row = gate.rows[0];
+  if (!row?.is_demo) throw new DemoCallError("not_demo", "Only the demo workspace can place demo calls");
+  if (!row.has_contact) throw new DemoCallError("no_phone", "This teacher has no phone number on record");
+  if (!row.class_id || !row.timezone) throw new DemoCallError("no_class", "The demo workspace is not set up for calls");
+
+  // A job already waiting is simply used again.
+  const existing = await getPool().query<ManualDemoFollowUp>(
+    `SELECT follow_up_job_id, scheduled_end_at, TRUE AS already_queued
+       FROM teacher_follow_up_jobs
+      WHERE school_id = $1 AND teacher_id = $2 AND is_manual_demo = TRUE AND status = 'queued'
+      ORDER BY created_at DESC LIMIT 1`,
+    [context.school_id, context.teacher_id],
+  );
+  if (existing.rows[0]) return existing.rows[0];
+
+  if (row.recent > 0) {
+    throw new DemoCallError("too_soon", "A demo call was placed a moment ago");
+  }
+  if (row.today >= DEMO_CALL_DAILY_LIMIT) {
+    throw new DemoCallError("daily_limit", "The daily limit of demo calls has been reached");
+  }
+
+  const inserted = await getPool().query<ManualDemoFollowUp>(
+    `INSERT INTO teacher_follow_up_jobs (
+       calendar_entry_id, school_id, class_id, teacher_id,
+       scheduled_date, scheduled_end_at, idempotency_key, is_manual_demo
+     )
+     VALUES (NULL, $1, $2, $3, ($4::timestamptz AT TIME ZONE $5)::date, $4, $6, TRUE)
+     ON CONFLICT (school_id, teacher_id)
+       WHERE is_manual_demo = TRUE AND status IN ('queued', 'initiating', 'outcome_unknown')
+     DO NOTHING
+     RETURNING follow_up_job_id, scheduled_end_at, FALSE AS already_queued`,
+    [
+      context.school_id,
+      row.class_id,
+      context.teacher_id,
+      now,
+      row.timezone,
+      `manual-demo:${context.school_id}:${context.teacher_id}:${randomUUID()}`,
+    ],
+  );
+  if (!inserted.rows[0]) {
+    throw new DemoCallError("too_soon", "A demo call is already being placed");
+  }
+  return inserted.rows[0];
+}
+
 export async function listDueFollowUps(
   teacherId: string,
   schoolId: string,

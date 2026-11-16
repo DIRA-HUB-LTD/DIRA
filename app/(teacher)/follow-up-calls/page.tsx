@@ -10,7 +10,9 @@ import { getSignedInTeacher } from "@/lib/auth/teacher-session";
 import { dispatchOneDueFollowUp } from "@/lib/services/follow-up-dispatch";
 import {
   confirmSchoolOpenDays,
+  DemoCallError,
   prepareDailyFollowUpQueue,
+  queueDemoWorkspaceCall,
   queueManualDemoFollowUp,
   schoolDaysAreConfirmed,
 } from "@/lib/services/follow-up-queue";
@@ -142,6 +144,33 @@ async function queueTodaysCallsAction(formData: FormData) {
   redirect(`/follow-up-calls?queued=${encodeURIComponent(outcome)}`);
 }
 
+function describeDemoCall(code: string): string {
+  switch (code) {
+    case "queued":
+      return "A manual demo call is queued. It has not called your phone yet.";
+    case "already_queued":
+      return "An active manual demo call already exists; no duplicate was added.";
+    case "provider_accepted":
+      return "The call is on its way: your phone should ring within a few seconds. Answer, say a sentence or two about a learner, and hang up. DIRA then transcribes the recording and the draft appears under Call Drafts, usually within a couple of minutes.";
+    case "provider_rejected":
+      return "The phone provider rejected the call request. Check the Africa's Talking balance and caller ID.";
+    case "outcome_unknown":
+      return "The call result is uncertain. Check with Africa's Talking before retrying.";
+    case "not_queued":
+      return "That demo call is no longer waiting, so no call was placed.";
+    case "no_phone":
+      return "This teacher has no phone number on record yet.";
+    case "too_soon":
+      return "A demo call was placed a moment ago. Wait about three minutes and try again.";
+    case "daily_limit":
+      return "The daily limit of demo calls has been reached. Try again tomorrow.";
+    case "disabled":
+      return "Demo calls are switched off on this server.";
+    default:
+      return "The demo call could not be placed. Check the Africa's Talking settings, then try again.";
+  }
+}
+
 function describeQueueOutcome(outcome: string): string {
   if (outcome.startsWith("ok:")) {
     const [, queued, refreshed] = outcome.split(":");
@@ -166,6 +195,35 @@ function describeQueueOutcome(outcome: string): string {
     default:
       return "Today's calls could not be queued. Try again, or check the server log.";
   }
+}
+
+/**
+ * Demo workspace only: ring the phone on this teacher's record now, as DIRA would after a
+ * lesson, so the call, its transcript and the draft can be shown end to end.
+ */
+async function placeWorkspaceDemoCallAction() {
+  "use server";
+  const teacher = await getSignedInTeacher();
+  if (!teacher) {
+    redirect("/follow-up-calls?demoCall=unavailable");
+  }
+  const context = { teacher_id: teacher.teacher_id, school_id: teacher.school_id };
+  let outcome = "unavailable";
+  try {
+    const queued = await queueDemoWorkspaceCall(context);
+    const result = await dispatchOneDueFollowUp(new Date(), context, queued.follow_up_job_id);
+    outcome = result?.status ?? "not_queued";
+  } catch (error) {
+    if (error instanceof DemoCallError) {
+      outcome = error.code;
+    } else {
+      console.error("Could not place the demo call", {
+        errorName: error instanceof Error ? error.name : "UnknownError",
+      });
+    }
+  }
+  revalidatePath("/follow-up-calls");
+  redirect(`/follow-up-calls?demoCall=${outcome}`);
 }
 
 /** Queue an immediate demo-only job; it does not call the phone. */
@@ -222,6 +280,18 @@ export default async function FollowUpCallsPage({
 }) {
   const { demoCall, queued } = await searchParams;
   const signedIn = await getSignedInTeacher();
+  let isDemoWorkspace = false;
+  if (signedIn) {
+    try {
+      const flag = await getPool().query<{ is_demo: boolean }>(
+        "SELECT is_demo FROM schools WHERE school_id = $1",
+        [signedIn.school_id],
+      );
+      isDemoWorkspace = flag.rows[0]?.is_demo === true && process.env.DIRA_DEMO_WORKSPACE_CALLS !== "false";
+    } catch {
+      isDemoWorkspace = false;
+    }
+  }
   await connection();
 
 
@@ -343,6 +413,29 @@ export default async function FollowUpCallsPage({
           </Card>
         )}
 
+        {isDemoWorkspace && (
+          <Card className="space-y-3 border border-dira-amber/60 p-5">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+              Call me now (demo)
+            </h2>
+            <p className="text-sm text-gray-700 dark:text-gray-300">
+              Rings the phone on this teacher&apos;s record, the way DIRA calls a teacher after a
+              lesson. Answer, say a sentence or two about a learner, and hang up. The recording is
+              transcribed and a draft appears under{" "}
+              <Link href="/call-drafts" className="underline">Call Drafts</Link>, where you assign
+              it to the right learner and, if one is waiting, the right test.
+            </p>
+            <form action={placeWorkspaceDemoCallAction}>
+              <button
+                type="submit"
+                className="rounded-md bg-dira-teal px-4 py-2 text-sm font-medium text-white hover:bg-dira-teal-deep"
+              >
+                Call me now
+              </button>
+            </form>
+          </Card>
+        )}
+
         {signedIn?.role === "admin" && (
           <Card className="space-y-3 border border-dira-teal/40 p-5">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
@@ -374,14 +467,7 @@ export default async function FollowUpCallsPage({
 
         {demoCall && (
           <Card className="border border-blue-300 p-4 text-sm text-blue-900 dark:border-blue-800 dark:text-blue-200" role="status">
-            {demoCall === "queued" && "A manual demo call is queued. It has not called your phone yet."}
-            {demoCall === "already_queued" && "An active manual demo call already exists; no duplicate was added."}
-            {demoCall === "provider_accepted" && "Africa's Talking accepted the demo call request."}
-            {demoCall === "provider_rejected" && "Africa's Talking rejected the demo call request."}
-            {demoCall === "outcome_unknown" && "The call result is uncertain. Check with Africa's Talking before retrying."}
-            {demoCall === "not_queued" && "That manual demo call is no longer queued, so no call was placed."}
-            {(demoCall === "unavailable" || !["queued", "already_queued", "provider_accepted", "provider_rejected", "outcome_unknown", "not_queued"].includes(demoCall)) &&
-              "The demo action is unavailable. Check development mode, demo recipient, database migration, and teacher/class setup."}
+            {describeDemoCall(demoCall)}
           </Card>
         )}
 

@@ -216,7 +216,7 @@ export async function listDrafts(context: LogObservationContext): Promise<DraftR
       WHERE teacher_id = $1 AND school_id = $2 AND status <> 'discarded'
       ORDER BY created_at DESC, segment_index
       LIMIT 100`,
-    [context.teacher_id, context.school_id],
+    [context.teacher_id],
   );
   return result.rows;
 }
@@ -227,10 +227,37 @@ export async function listDrafts(context: LogObservationContext): Promise<DraftR
  * from their own roster. The existing logObservation does the write; its submission_id
  * (derived from the draft id) makes repeated confirmations return the same observation.
  */
+/**
+ * Accepted tests this teacher is waiting to hear the outcome of. A confirmed draft can be
+ * recorded as one of these outcomes (completing the test); only ACCEPTED tests can be.
+ */
+export interface OpenTest {
+  test_id: string;
+  learner_id: string;
+  label: string;
+  activity_date: string;
+}
+
+export async function listOpenTests(context: LogObservationContext): Promise<OpenTest[]> {
+  const result = await getPool().query<OpenTest>(
+    `SELECT t.test_id, t.learner_id,
+            COALESCE(NULLIF(TRIM(t.exploration_question), ''), t.suggested_activity) AS label,
+            t.activity_date::text AS activity_date
+       FROM activity_tests t
+      WHERE t.conducting_teacher_id = $1
+        AND t.status = 'ACCEPTED'
+      ORDER BY t.activity_date DESC, t.test_id
+      LIMIT 200`,
+    [context.teacher_id],
+  );
+  return result.rows;
+}
+
 export async function confirmDraft(
   draftId: string,
   learnerId: string | undefined,
   context: LogObservationContext,
+  linkedTestId?: string,
 ): Promise<{ observation_id: string; duplicate: boolean }> {
   const draft = await getPool().query<{
     segment_text: string;
@@ -277,9 +304,13 @@ export async function confirmDraft(
   const { observation, duplicate } = await logObservation(
     {
       learner_id: chosen,
-      observation_type: (OBSERVATION_TYPES as readonly string[]).includes(row.observation_type)
-        ? (row.observation_type as ObservationType)
-        : "other",
+      // A draft recorded as a test's outcome is a test result, whatever the call was tagged.
+      observation_type: linkedTestId?.trim()
+        ? "test_result"
+        : (OBSERVATION_TYPES as readonly string[]).includes(row.observation_type)
+          ? (row.observation_type as ObservationType)
+          : "other",
+      ...(linkedTestId?.trim() ? { linked_test_id: linkedTestId.trim() } : {}),
       content: row.segment_text,
       observed_at: row.first_event_at.toISOString(),
       capture_method: "basic_phone_callback",
