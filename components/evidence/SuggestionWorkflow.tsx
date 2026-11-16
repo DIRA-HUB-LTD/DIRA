@@ -181,9 +181,9 @@ export default function SuggestionWorkflow({
               {suggestion.suggested_activity.purpose} (
               {suggestion.suggested_activity.duration_minutes} minutes)
             </p>
-            <ol className="mt-2 list-inside list-decimal space-y-1 text-sm text-gray-700 dark:text-gray-200">
-              {suggestion.suggested_activity.steps.map((step) => (
-                <li key={step}>{step}</li>
+            <ol className="mt-2 list-decimal space-y-1.5 pl-5 text-sm text-gray-700 dark:text-gray-200">
+              {suggestion.suggested_activity.steps.map((step, index) => (
+                <li key={`${index}-${step}`}>{step}</li>
               ))}
             </ol>
             {suggestion.suggested_activity.intended_outcome && (
@@ -192,7 +192,7 @@ export default function SuggestionWorkflow({
               </p>
             )}
             {suggestion.suggested_activity.assessment_criteria && (
-              <ul className="mt-2 list-inside list-disc text-sm text-gray-700 dark:text-gray-200">
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-gray-700 dark:text-gray-200">
                 {suggestion.suggested_activity.assessment_criteria.map((criterion) => (
                   <li key={criterion}>{criterion}</li>
                 ))}
@@ -203,7 +203,7 @@ export default function SuggestionWorkflow({
             <h4 className="font-medium text-gray-900 dark:text-gray-100">
               Evidence considered
             </h4>
-            <ul className="mt-1 list-inside list-disc text-sm text-gray-700 dark:text-gray-200">
+            <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-gray-700 dark:text-gray-200">
               {suggestion.cited_observations?.map((item) => (
                 <li key={item.observation_id}>
                   {item.content} <span className="text-xs">({item.observation_id})</span>

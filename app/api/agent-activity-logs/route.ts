@@ -17,7 +17,20 @@ export async function GET(request: NextRequest) {
   // teacher must therefore never reach them in a real deployment (roadmap S3).
   const diagnosticsAllowed =
     process.env.NODE_ENV !== "production" || process.env.DIRA_DEMO_MODE === "true";
-  const context = diagnosticsAllowed ? await resolveTeacherContext() : null;
+  let context = diagnosticsAllowed ? await resolveTeacherContext() : null;
+  // Judging window: DIRA_SHOW_AGENT_LOGS=true opens the logs, but only to a teacher
+  // working in the synthetic demo workspace, never to a real school. Remove the variable
+  // afterwards to close it again.
+  if (!context && process.env.DIRA_SHOW_AGENT_LOGS === "true") {
+    const signedIn = await resolveTeacherContext();
+    if (signedIn) {
+      const demo = await getPool().query<{ is_demo: boolean }>(
+        "SELECT is_demo FROM schools WHERE school_id = $1",
+        [signedIn.school_id],
+      );
+      if (demo.rows[0]?.is_demo === true) context = signedIn;
+    }
+  }
   if (!context) {
     return NextResponse.json(
       { error: "Agent activity logs are not available in this environment" },

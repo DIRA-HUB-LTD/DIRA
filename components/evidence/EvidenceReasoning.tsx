@@ -365,6 +365,26 @@ export default function EvidenceReasoning({
     }
   };
 
+  // A test with a recorded outcome is assessed automatically, one at a time, the first
+  // time the card is opened. The teacher can still press Reassess. Each test is tried at
+  // most once per page view (so a failure never loops) and at most four are run, which
+  // bounds the model calls an old backlog could trigger.
+  const autoAssessed = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (assessingTestId !== null || autoAssessed.current.size >= 4) return;
+    const next = tests.find(
+      (test) =>
+        test.hypothesis?.trim() &&
+        test.outcome_observation_id &&
+        !assessments.has(test.test_id) &&
+        !autoAssessed.current.has(test.test_id),
+    );
+    if (!next) return;
+    autoAssessed.current.add(next.test_id);
+    void assess(next.test_id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tests, assessments, assessingTestId]);
+
   const toggleArea = (testId: string) => {
     setExpandedAreas((current) => {
       const next = new Set(current);
@@ -736,7 +756,7 @@ export default function EvidenceReasoning({
                               ? "Assessing…"
                               : assessment
                                 ? "Reassess"
-                                : "Assess hypothesis"}
+                                : "Assess now"}
                           </button>
                         </div>
                         {!canAssess && test.hypothesis && !test.outcome_observation_id && (
