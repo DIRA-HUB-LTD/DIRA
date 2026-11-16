@@ -1,6 +1,32 @@
 // lib/db/client.ts
 import { Pool } from "pg";
 
+/**
+ * The connection string the running app should use. An explicit DATABASE_POOL_URL wins.
+ * Otherwise, in production, a Supabase Session-pooler string (port 5432) is switched to
+ * the same pooler's Transaction mode (port 6543, same user and password): serverless
+ * instances then share many client slots instead of the Session pooler's ~15, which
+ * ran out and produced intermittent "server error" pages. The app uses no session state
+ * (only transaction-scoped locks), so Transaction mode is safe. Migrations and scripts
+ * read DATABASE_URL directly and are unaffected.
+ */
+export function runtimeConnectionString(env: NodeJS.ProcessEnv): string | undefined {
+  const explicit = env.DATABASE_POOL_URL?.trim();
+  if (explicit) return explicit;
+  const direct = env.DATABASE_URL;
+  if (!direct || env.NODE_ENV !== "production") return direct;
+  try {
+    const url = new URL(direct);
+    if (url.hostname.endsWith(".pooler.supabase.com") && (url.port === "" || url.port === "5432")) {
+      url.port = "6543";
+      return url.toString();
+    }
+  } catch {
+    // Not a URL we understand: use it exactly as given.
+  }
+  return direct;
+}
+
 // DON'T initialize anything at the top level
 let pool: Pool | null = null;
 
@@ -15,16 +41,23 @@ export const getPool = (): Pool => {
 
   if (pool) return pool;
 
-  const connectionString = process.env.DATABASE_URL;
+  // DATABASE_POOL_URL, when set, is what the running app uses (a transaction-mode
+  // pooler such as Supabase's port 6543, which shares few server connections among
+  // many serverless instances). DATABASE_URL stays the direct/session string that
+  // migrations and scripts need. Nothing here uses session state, so both work.
+  const connectionString = runtimeConnectionString(process.env);
   if (!connectionString) {
     throw new Error("DATABASE_URL is not configured");
   }
 
+  const configuredMax = Number(process.env.DIRA_DB_POOL_MAX);
+  const production = process.env.NODE_ENV === "production";
   pool = new Pool({
     connectionString,
-    max: 10,
-    idleTimeoutMillis: 30_000,
-    connectionTimeoutMillis: 5_000,
+    // Each serverless instance keeps few connections; a session pooler allows ~15 in total.
+    max: Number.isInteger(configuredMax) && configuredMax > 0 ? configuredMax : production ? 3 : 10,
+    idleTimeoutMillis: production ? 10_000 : 30_000,
+    connectionTimeoutMillis: 8_000,
   });
 
   // Optional: cache in development for hot reloading
