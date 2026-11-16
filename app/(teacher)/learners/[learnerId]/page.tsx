@@ -60,19 +60,6 @@ export default async function LearnerDetailPage({
   await connection();
   const { learnerId } = await params;
 
-  if (
-    process.env.NODE_ENV === "production" &&
-    process.env.DIRA_DEMO_MODE !== "true"
-  ) {
-    return (
-      <Card className="p-6">
-        <h1 className="text-xl font-semibold">Learner record unavailable</h1>
-        <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
-          Learner records require an authenticated teacher session, which is not configured.
-        </p>
-      </Card>
-    );
-  }
 
   try {
     const context = await resolveTeacherContext();

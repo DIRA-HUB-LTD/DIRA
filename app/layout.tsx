@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter, Roboto_Mono } from "next/font/google";
 // @ts-ignore CSS is loaded by Next.js and does not need TypeScript declarations.
 import "./globals.css";
@@ -15,11 +15,16 @@ const geistMono = Roboto_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "DIRA - Classroom Observation System",
+  title: "DIRA Hub - Evidence for every learner's next step",
   description: "Teacher-focused classroom observation and learning pathway system",
   manifest: "/manifest.json",
-  themeColor: "#2563eb",
-  viewport: "width=device-width, initial-scale=1, maximum-scale=1",
+};
+
+export const viewport: Viewport = {
+  themeColor: "#1f5f57",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

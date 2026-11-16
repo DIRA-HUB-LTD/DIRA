@@ -31,19 +31,6 @@ function formatPeriodDate(value: string): string {
 export default async function ThisWeekPage() {
   await connection();
 
-  if (
-    process.env.NODE_ENV === "production" &&
-    process.env.DIRA_DEMO_MODE !== "true"
-  ) {
-    return (
-      <Card className="p-6">
-        <h1 className="text-xl font-semibold">Focus list unavailable</h1>
-        <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
-          The focus list requires an authenticated teacher session, which is not configured.
-        </p>
-      </Card>
-    );
-  }
 
   try {
     const context = await resolveTeacherContext();

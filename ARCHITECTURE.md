@@ -12,6 +12,9 @@ Teacher (call / chat / UI) ──► Next.js App Router ──► services + Pos
                     GLM-5.3 Flash (Z.AI) or self-hosted open-weights model via lib/models.ts
 ```
 
+## The assessment engine (in progress)
+`packages/assessment-engine` is a small npm workspace package of pure, domain-neutral logic: corroboration (`corroborate`, `groupByCategory`), citation checks (`validateCitations`), the verbatim-quote check (`verifyExcerpt`), validated generation with one correction then fail-closed (`generateValidated`) and idempotency fingerprints (`fingerprint`). It imports nothing from Next.js, the database, the app or the environment, and uses no classroom vocabulary; a test enforces both. DIRA keeps thin adapters that map observations to the engine's `EvidenceItem` and keep DIRA's field names. Moved so far: the corroboration rules, proposal fingerprint, signed-summary retry and citation check, and the call-draft quote check. Characterization tests pinned the old behaviour first and pass unchanged. Still in DIRA: the LangGraph nodes, the evidence-reasoning retry loop, prompts and SQL.
+
 ## Stack
 | Layer | Choice |
 |---|---|

@@ -13,7 +13,11 @@ export async function GET(request: NextRequest) {
   // Teacher context is available only in development or explicit demo mode.
   // Do not expose internal diagnostic logs in a production deployment without
   // adding real authenticated admin/role authorization.
-  const context = await resolveTeacherContext();
+  // These logs are not scoped to a workspace, and anyone can now sign up. A signed-in
+  // teacher must therefore never reach them in a real deployment (roadmap S3).
+  const diagnosticsAllowed =
+    process.env.NODE_ENV !== "production" || process.env.DIRA_DEMO_MODE === "true";
+  const context = diagnosticsAllowed ? await resolveTeacherContext() : null;
   if (!context) {
     return NextResponse.json(
       { error: "Agent activity logs are not available in this environment" },

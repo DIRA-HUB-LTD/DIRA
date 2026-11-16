@@ -1,0 +1,377 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`characterization: corroboration (to be extracted to the engine) > breaks ties between equally weak signals by how few observations they have 1`] = `
+[
+  "behavioral",
+  "academic",
+]
+`;
+
+exports[`characterization: corroboration (to be extracted to the engine) > classifies every signal group and sorts the weakest first 1`] = `
+[
+  {
+    "distinct_contexts": 1,
+    "distinct_dates": 1,
+    "distinct_teachers": 1,
+    "duplicate_observation_ids": [],
+    "kind": "single_observation",
+    "observation_ids": [
+      "E1",
+    ],
+    "observation_type": "extracurricular",
+    "possible_theme": "Leadership",
+    "status": "under_corroborated",
+    "variation_observation_ids": [],
+  },
+  {
+    "distinct_contexts": 1,
+    "distinct_dates": 1,
+    "distinct_teachers": 1,
+    "duplicate_observation_ids": [],
+    "kind": "single_observation",
+    "observation_ids": [
+      "O2",
+    ],
+    "observation_type": "other",
+    "possible_theme": null,
+    "status": "under_corroborated",
+    "variation_observation_ids": [],
+  },
+  {
+    "distinct_contexts": 1,
+    "distinct_dates": 3,
+    "distinct_teachers": 1,
+    "duplicate_observation_ids": [],
+    "kind": "repeated_signal",
+    "observation_ids": [
+      "B1",
+      "B2",
+      "B3",
+    ],
+    "observation_type": "behavioral",
+    "possible_theme": null,
+    "status": "under_corroborated",
+    "variation_observation_ids": [
+      "B1",
+      "B2",
+      "B3",
+    ],
+  },
+  {
+    "distinct_contexts": 2,
+    "distinct_dates": 2,
+    "distinct_teachers": 2,
+    "duplicate_observation_ids": [
+      "A2",
+    ],
+    "kind": "repeated_signal",
+    "observation_ids": [
+      "A1",
+      "A3",
+    ],
+    "observation_type": "academic",
+    "possible_theme": null,
+    "status": "under_corroborated",
+    "variation_observation_ids": [
+      "A1",
+      "A3",
+    ],
+  },
+  {
+    "distinct_contexts": 3,
+    "distinct_dates": 4,
+    "distinct_teachers": 4,
+    "duplicate_observation_ids": [],
+    "kind": "repeated_signal",
+    "observation_ids": [
+      "P1",
+      "P2",
+      "P3",
+      "X1",
+    ],
+    "observation_type": "participation",
+    "possible_theme": "Participation",
+    "status": "more_corroborated",
+    "variation_observation_ids": [
+      "P1",
+      "P2",
+      "P3",
+      "X1",
+    ],
+  },
+]
+`;
+
+exports[`characterization: corroboration (to be extracted to the engine) > groups observations by type and splits eligible from awaiting review 1`] = `
+[
+  {
+    "awaiting_review_ids": [],
+    "eligible_observation_ids": [
+      "A1",
+      "A2",
+      "A3",
+    ],
+    "observation_ids": [
+      "A1",
+      "A2",
+      "A3",
+    ],
+    "observation_type": "academic",
+  },
+  {
+    "awaiting_review_ids": [],
+    "eligible_observation_ids": [
+      "B1",
+      "B2",
+      "B3",
+    ],
+    "observation_ids": [
+      "B1",
+      "B2",
+      "B3",
+    ],
+    "observation_type": "behavioral",
+  },
+  {
+    "awaiting_review_ids": [],
+    "eligible_observation_ids": [
+      "E1",
+    ],
+    "observation_ids": [
+      "E1",
+    ],
+    "observation_type": "extracurricular",
+  },
+  {
+    "awaiting_review_ids": [
+      "O1",
+    ],
+    "eligible_observation_ids": [
+      "O2",
+    ],
+    "observation_ids": [
+      "O1",
+      "O2",
+    ],
+    "observation_type": "other",
+  },
+  {
+    "awaiting_review_ids": [],
+    "eligible_observation_ids": [
+      "P1",
+      "P2",
+      "P3",
+      "X1",
+    ],
+    "observation_ids": [
+      "P1",
+      "P2",
+      "P3",
+      "X1",
+    ],
+    "observation_type": "participation",
+  },
+]
+`;
+
+exports[`characterization: evidence preparation outcomes > a repeated, under-corroborated signal -> ready, with the cited evidence 1`] = `
+{
+  "candidate": {
+    "distinct_contexts": 1,
+    "distinct_dates": 2,
+    "distinct_teachers": 1,
+    "duplicate_observation_ids": [],
+    "kind": "repeated_signal",
+    "observation_ids": [
+      "R1",
+      "R2",
+    ],
+    "observation_type": "participation",
+    "possible_theme": null,
+    "status": "under_corroborated",
+    "variation_observation_ids": [
+      "R1",
+      "R2",
+    ],
+  },
+  "cited_observations": [
+    {
+      "activity_context": "Group task",
+      "content": "Offered an idea during the group task.",
+      "observation_id": "R1",
+      "observation_type": "participation",
+      "observed_at": "2026-02-02",
+      "subject": "Mathematics",
+      "teacher_id": "T1",
+    },
+    {
+      "activity_context": "Group task",
+      "content": "Joined in again.",
+      "observation_id": "R2",
+      "observation_type": "participation",
+      "observed_at": "2026-02-09",
+      "subject": "Mathematics",
+      "teacher_id": "T1",
+    },
+  ],
+  "grouped_observations": [
+    {
+      "awaiting_review_ids": [],
+      "eligible_observation_ids": [
+        "R1",
+        "R2",
+      ],
+      "observation_ids": [
+        "R1",
+        "R2",
+      ],
+      "observation_type": "participation",
+    },
+  ],
+  "learner_id": "L1",
+  "limitations": [
+    "possible_theme is a tentative synthetic/teacher-entered tag, not a verified conclusion.",
+    "Exact-text duplicate detection cannot detect paraphrases or determine whether different narratives conflict.",
+    "Cited observations vary in wording; this is context to explore, not an automatically resolved contradiction.",
+    "A single activity cannot establish a stable learner characteristic.",
+  ],
+  "ok": true,
+  "prior_test_ids": [],
+  "status": "ready",
+  "under_corroborated_signals": [
+    {
+      "distinct_contexts": 1,
+      "distinct_dates": 2,
+      "distinct_teachers": 1,
+      "duplicate_observation_ids": [],
+      "kind": "repeated_signal",
+      "observation_ids": [
+        "R1",
+        "R2",
+      ],
+      "observation_type": "participation",
+      "possible_theme": null,
+      "status": "under_corroborated",
+      "variation_observation_ids": [
+        "R1",
+        "R2",
+      ],
+    },
+  ],
+}
+`;
+
+exports[`characterization: evidence preparation outcomes > an ACCEPTED test already citing that evidence blocks another suggestion 1`] = `
+{
+  "grouped_observations": [
+    {
+      "awaiting_review_ids": [],
+      "eligible_observation_ids": [
+        "R1",
+        "R2",
+      ],
+      "observation_ids": [
+        "R1",
+        "R2",
+      ],
+      "observation_type": "participation",
+    },
+  ],
+  "learner_id": "L1",
+  "message": "An existing accepted activity already cites this evidence. Record its outcome before suggesting another activity.",
+  "ok": false,
+  "status": "insufficient_evidence",
+  "under_corroborated_signals": [
+    {
+      "distinct_contexts": 1,
+      "distinct_dates": 2,
+      "distinct_teachers": 1,
+      "duplicate_observation_ids": [],
+      "kind": "repeated_signal",
+      "observation_ids": [
+        "R1",
+        "R2",
+      ],
+      "observation_type": "participation",
+      "possible_theme": null,
+      "status": "under_corroborated",
+      "variation_observation_ids": [
+        "R1",
+        "R2",
+      ],
+    },
+  ],
+}
+`;
+
+exports[`characterization: evidence preparation outcomes > no observations -> insufficient_evidence 1`] = `
+{
+  "grouped_observations": [],
+  "learner_id": "L1",
+  "message": "The learner has no observations available to support a suggestion.",
+  "ok": false,
+  "status": "insufficient_evidence",
+  "under_corroborated_signals": [],
+}
+`;
+
+exports[`characterization: evidence preparation outcomes > only unreviewed observations -> needs_review 1`] = `
+{
+  "grouped_observations": [
+    {
+      "awaiting_review_ids": [
+        "N1",
+      ],
+      "eligible_observation_ids": [],
+      "observation_ids": [
+        "N1",
+      ],
+      "observation_type": "participation",
+    },
+  ],
+  "learner_id": "L1",
+  "message": "The learner has observations, but none are currently eligible as reviewed evidence.",
+  "ok": false,
+  "status": "needs_review",
+  "under_corroborated_signals": [],
+}
+`;
+
+exports[`characterization: evidence preparation outcomes > reviewed but no repeated under-corroborated signal -> no_suitable_activity 1`] = `
+{
+  "grouped_observations": [
+    {
+      "awaiting_review_ids": [],
+      "eligible_observation_ids": [
+        "S1",
+      ],
+      "observation_ids": [
+        "S1",
+      ],
+      "observation_type": "participation",
+    },
+  ],
+  "learner_id": "L1",
+  "message": "No under-corroborated repeated signal is suitable for a follow-up activity.",
+  "ok": false,
+  "status": "no_suitable_activity",
+  "under_corroborated_signals": [
+    {
+      "distinct_contexts": 1,
+      "distinct_dates": 1,
+      "distinct_teachers": 1,
+      "duplicate_observation_ids": [],
+      "kind": "single_observation",
+      "observation_ids": [
+        "S1",
+      ],
+      "observation_type": "participation",
+      "possible_theme": null,
+      "status": "under_corroborated",
+      "variation_observation_ids": [],
+    },
+  ],
+}
+`;
+
+exports[`characterization: proposal fingerprint > is a stable SHA-256 of the proposal content 1`] = `"301703091f2dc274b7e2fafd2a17047777ccaadc8e981d5f845e9082b612a405"`;

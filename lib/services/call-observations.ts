@@ -1,5 +1,6 @@
 import "server-only";
 
+import { verifyExcerpt } from "@dira/assessment-engine";
 import { getPool } from "@/lib/db/client";
 import {
   OBSERVATION_TYPES,
@@ -56,11 +57,6 @@ function nameTokens(value: string): string[] {
     .replace(/[^a-z\s'-]/g, " ")
     .split(/\s+/)
     .filter(Boolean);
-}
-
-/** Whitespace/case-insensitive form used to prove a segment really appears in the transcript. */
-function normalizeText(value: string): string {
-  return value.toLowerCase().replace(/\s+/g, " ").trim();
 }
 
 /**
@@ -150,14 +146,13 @@ export async function saveCallObservationDrafts(
     throw new DraftError("Call is not linked to a teacher yet", 409);
   }
 
-  const transcript = normalizeText(row.transcript_text);
   const roster = await loadTeacherRoster(row.teacher_id, row.school_id, row.first_event_at);
   let saved = 0;
   let rejected = 0;
 
   for (const [index, segment] of segments.entries()) {
     const text = segment.segment_text.trim();
-    if (!text || !transcript.includes(normalizeText(text))) {
+    if (!verifyExcerpt(text, row.transcript_text)) {
       rejected += 1;
       continue;
     }

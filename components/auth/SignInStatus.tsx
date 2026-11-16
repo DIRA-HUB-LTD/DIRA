@@ -35,12 +35,16 @@ export default function SignInStatus({ compact = false }: { compact?: boolean })
   if (!me) return null;
   if (!me.teacher) {
     return (
-      <Link
-        href="/sign-in"
-        className="text-sm font-medium text-blue-600 hover:underline dark:text-blue-400"
-      >
-        {compact ? "Sign in" : "Sign in as a named teacher"}
-      </Link>
+      <span className="flex items-center gap-3 text-sm font-medium">
+        <Link href="/sign-in" className="text-blue-600 hover:underline dark:text-blue-400">
+          {compact ? "Sign in" : "Sign in as a named teacher"}
+        </Link>
+        {!compact && (
+          <Link href="/sign-up" className="text-blue-600 hover:underline dark:text-blue-400">
+            Create account
+          </Link>
+        )}
+      </span>
     );
   }
   return (

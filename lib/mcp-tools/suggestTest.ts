@@ -1,5 +1,11 @@
 import type { ObservationType } from "../db/schema";
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
+import {
+	corroborate,
+	fingerprint,
+	groupByCategory,
+	type EvidenceItem,
+} from "@dira/assessment-engine";
 import type {
 	EducationRetrievalStatus,
 	EducationSource,
@@ -25,7 +31,7 @@ export function proposalFingerprint(suggestion: Extract<SuggestTestResult, { ok:
 		limitations: suggestion.limitations,
 		educational_references: suggestion.educational_references ?? [],
 	};
-	return createHash("sha256").update(JSON.stringify(snapshot)).digest("hex");
+	return fingerprint(snapshot);
 }
 
 export interface SuggestionObservation {
@@ -168,11 +174,6 @@ export type SuggestionEvidencePreparation =
 			limitations: string[];
 		};
 
-interface SignalGroup {
-	observation_type: ObservationType;
-	observations: SuggestionObservation[];
-}
-
 const REVIEWED_STATUSES = new Set(["not_required", "confirmed", "updated"]);
 
 /* Legacy deterministic reference only; the active workflow calls the LangGraph generator. */
@@ -297,119 +298,47 @@ function uniqueObservations(observations: SuggestionObservation[]): SuggestionOb
 	return [...byId.values()];
 }
 
-function normalize(value: string): string {
-	return value.toLowerCase().trim().replace(/\s+/g, " ");
+/** DIRA observation -> the engine's domain-neutral evidence item. */
+function toEvidenceItem(observation: SuggestionObservation): EvidenceItem {
+	return {
+		id: observation.observation_id,
+		group: observation.observation_type,
+		observer: observation.teacher_id,
+		date: observation.observation_date,
+		context: observation.activity_context,
+		text: observation.reviewed_observation ?? observation.original_observation,
+		reviewed: REVIEWED_STATUSES.has(observation.teacher_review_status),
+		theme: observation.possible_theme,
+	};
 }
 
 export function groupObservationsByType(
 	observations: SuggestionObservation[],
 ): GroupedObservationType[] {
-	const groups = new Map<ObservationType, GroupedObservationType>();
-	for (const observation of uniqueObservations(observations)) {
-		let group = groups.get(observation.observation_type);
-		if (!group) {
-			group = {
-				observation_type: observation.observation_type,
-				observation_ids: [],
-				eligible_observation_ids: [],
-				awaiting_review_ids: [],
-			};
-			groups.set(observation.observation_type, group);
-		}
-		group.observation_ids.push(observation.observation_id);
-		if (REVIEWED_STATUSES.has(observation.teacher_review_status)) {
-			group.eligible_observation_ids.push(observation.observation_id);
-		} else {
-			group.awaiting_review_ids.push(observation.observation_id);
-		}
-	}
-	return [...groups.values()].sort((left, right) =>
-		left.observation_type.localeCompare(right.observation_type),
-	);
+	return groupByCategory(observations.map(toEvidenceItem)).map((group) => ({
+		observation_type: group.group as ObservationType,
+		observation_ids: group.ids,
+		eligible_observation_ids: group.eligibleIds,
+		awaiting_review_ids: group.awaitingReviewIds,
+	}));
 }
 
-function makeSignalGroups(observations: SuggestionObservation[]): SignalGroup[] {
-	const groups = new Map<ObservationType, SignalGroup>();
-	for (const observation of uniqueObservations(observations)) {
-		if (!REVIEWED_STATUSES.has(observation.teacher_review_status)) continue;
-		let group = groups.get(observation.observation_type);
-		if (!group) {
-			group = {
-				observation_type: observation.observation_type,
-				observations: [],
-			};
-			groups.set(observation.observation_type, group);
-		}
-		group.observations.push(observation);
-	}
-	return [...groups.values()];
-}
-
+/** The thresholds (3 items, 2 teachers, 2 contexts, 3 dates) are the engine defaults. */
 export function findUnderCorroboratedSignals(
 	observations: SuggestionObservation[],
 ): EvidenceSignal[] {
-	const signals: EvidenceSignal[] = [];
-	for (const group of makeSignalGroups(observations)) {
-		const seenEvents = new Set<string>();
-		const distinct: SuggestionObservation[] = [];
-		const duplicates: string[] = [];
-
-		for (const observation of group.observations) {
-			const content = normalize(observation.reviewed_observation ?? observation.original_observation);
-			const eventKey = [
-				observation.teacher_id,
-				observation.observation_date,
-				observation.observation_type,
-				normalize(observation.activity_context ?? ""),
-				content,
-			].join("\u0000");
-			if (seenEvents.has(eventKey)) {
-				duplicates.push(observation.observation_id);
-			} else {
-				seenEvents.add(eventKey);
-				distinct.push(observation);
-			}
-		}
-
-		const dates = new Set(distinct.map((item) => item.observation_date));
-		const teachers = new Set(distinct.map((item) => item.teacher_id));
-		const contexts = new Set(
-			distinct.map((item) => normalize(item.activity_context ?? "")).filter(Boolean),
-		);
-		const narratives = new Set(
-			distinct.map((item) => normalize(item.reviewed_observation ?? item.original_observation)),
-		);
-		const underCorroborated =
-			distinct.length < 3 || teachers.size < 2 || contexts.size < 2 || dates.size < 3;
-		signals.push({
-			kind: distinct.length < 2 || dates.size < 2 ? "single_observation" : "repeated_signal",
-			observation_type: group.observation_type,
-			possible_theme: (() => {
-				const themes = new Set(
-					group.observations
-						.map((item) => item.possible_theme?.trim())
-						.filter((theme): theme is string => Boolean(theme))
-						.map(normalize),
-				);
-				return themes.size === 1 ? group.observations.find((item) => item.possible_theme?.trim())?.possible_theme?.trim() ?? null : null;
-			})(),
-			observation_ids: distinct.map((item) => item.observation_id),
-			variation_observation_ids: narratives.size > 1
-				? distinct.map((item) => item.observation_id)
-				: [],
-			distinct_dates: dates.size,
-			distinct_teachers: teachers.size,
-			distinct_contexts: contexts.size,
-			duplicate_observation_ids: duplicates,
-			status: underCorroborated ? "under_corroborated" : "more_corroborated",
-		});
-	}
-
-	return signals.sort((left, right) => {
-		const leftGaps = Number(left.distinct_teachers < 2) + Number(left.distinct_contexts < 2) + Number(left.distinct_dates < 3);
-		const rightGaps = Number(right.distinct_teachers < 2) + Number(right.distinct_contexts < 2) + Number(right.distinct_dates < 3);
-		return rightGaps - leftGaps || left.observation_ids.length - right.observation_ids.length;
-	});
+	return corroborate(observations.map(toEvidenceItem)).map((signal) => ({
+		kind: signal.kind === "single" ? "single_observation" : "repeated_signal",
+		observation_type: signal.group as ObservationType,
+		possible_theme: signal.theme,
+		observation_ids: signal.ids,
+		variation_observation_ids: signal.variationIds,
+		distinct_dates: signal.distinctDates,
+		distinct_teachers: signal.distinctObservers,
+		distinct_contexts: signal.distinctContexts,
+		duplicate_observation_ids: signal.duplicateIds,
+		status: signal.status,
+	}));
 }
 
 export function prepareSuggestionEvidence(

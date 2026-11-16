@@ -1,8 +1,16 @@
+import { redirect } from "next/navigation";
+import { resolveTeacherContext } from "@/lib/auth/teacher-context";
+import GuidedTour from "@/components/onboarding/GuidedTour";
 import AppHeader from "./AppHeader";
 import DesktopSidebar from "./DesktopSidebar";
 import MobileBottomNav from "./MobileBottomNav";
 
-export default function TeacherLayout({ children }: { children: React.ReactNode }) {
+export default async function TeacherLayout({ children }: { children: React.ReactNode }) {
+  // Every page in here acts as a teacher: one who signed in, opened the demo, or (outside
+  // production) the development fallback. Anyone else goes to the landing page.
+  const context = await resolveTeacherContext();
+  if (!context) redirect("/");
+
   return (
     <div className="flex h-dvh w-full gap-4 overflow-hidden bg-gray-50 p-4 dark:bg-gray-900">
       <DesktopSidebar />
@@ -13,6 +21,7 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
         </main>
         <MobileBottomNav />
       </div>
+      <GuidedTour />
     </div>
   );
 }

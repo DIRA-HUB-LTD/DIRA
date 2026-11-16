@@ -61,15 +61,6 @@ export default async function LogObservationPage({
   await connection();
   const { learnerId } = await params;
 
-  if (
-    process.env.NODE_ENV === "production" &&
-    process.env.DIRA_DEMO_MODE !== "true"
-  ) {
-    return unavailable(
-      "Observation logging requires an authenticated teacher session, which is not configured.",
-      learnerId,
-    );
-  }
 
   try {
     const context = await resolveTeacherContext();
