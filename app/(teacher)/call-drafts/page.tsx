@@ -3,11 +3,14 @@ import { connection } from "next/server";
 import Badge from "@/components/ui/Badge";
 import Card from "@/components/ui/Card";
 import { resolveTeacherContext } from "@/lib/auth/teacher-context";
+import DraftConfirmForm from "@/components/voice/DraftConfirmForm";
+import { ObservationError } from "@/lib/mcp-tools/logObservation";
 import {
   confirmDraft,
   discardDraft,
   DraftError,
   listDrafts,
+  listOpenTests,
   loadTeacherRoster,
 } from "@/lib/services/call-observations";
 
@@ -17,16 +20,19 @@ async function confirmAction(formData: FormData) {
   const context = await resolveTeacherContext();
   const draftId = formData.get("draftId");
   const learnerId = formData.get("learnerId");
+  const testId = formData.get("testId");
   if (!context || typeof draftId !== "string") return;
   try {
     await confirmDraft(
       draftId,
       typeof learnerId === "string" && learnerId ? learnerId : undefined,
       context,
+      typeof testId === "string" && testId ? testId : undefined,
     );
   } catch (error) {
-    // Rejected confirmations (e.g. no learner chosen) leave the draft untouched.
-    if (!(error instanceof DraftError)) throw error;
+    // Rejected confirmations (e.g. no learner chosen, or a test that is not waiting for an
+    // outcome) leave the draft untouched.
+    if (!(error instanceof DraftError) && !(error instanceof ObservationError)) throw error;
   }
   revalidatePath("/call-drafts");
 }
@@ -55,17 +61,21 @@ export default async function CallDraftsPage() {
     );
   }
 
-  const [drafts, roster] = await Promise.all([
+  const [drafts, roster, openTests] = await Promise.all([
     listDrafts(context),
     loadTeacherRoster(context.teacher_id, context.school_id, new Date()),
+    listOpenTests(context),
   ]);
+  const rosterIds = new Set(roster.map((learner) => learner.learner_id));
+  const waitingTests = openTests.filter((test) => rosterIds.has(test.learner_id));
   const nameById = new Map(roster.map((learner) => [learner.learner_id, learner.display_name]));
 
   return (
     <div className="space-y-4">
       <h1 className="text-xl font-semibold">Phone-call observation drafts</h1>
       <p className="text-sm text-gray-600 dark:text-gray-300">
-        Confirming a draft assigns it to a learner and saves an observation. Phone-call
+        Confirming a draft assigns it to a learner and saves an observation. If that learner has
+        an accepted test waiting for its result, you can record the draft as that test&apos;s outcome. Phone-call
         observations remain marked Recorded until they are separately reviewed on the learner record.
       </p>
       {drafts.length === 0 ? (
@@ -102,24 +112,12 @@ export default async function CallDraftsPage() {
                 </p>
               ) : (
                 <div className="flex flex-wrap items-center gap-2">
-                  <form action={confirmAction} className="flex flex-wrap items-center gap-2">
-                    <input type="hidden" name="draftId" value={draft.draft_id} />
-                    <select
-                      name="learnerId"
-                      defaultValue={choices.length === 1 ? choices[0].id : ""}
-                      className="rounded-md border border-gray-300 px-2 py-1 text-sm dark:border-gray-600 dark:bg-gray-800"
-                    >
-                      {choices.length !== 1 && <option value="">Choose learner…</option>}
-                      {choices.map((choice) => (
-                        <option key={choice.id} value={choice.id}>
-                          {choice.name}
-                        </option>
-                      ))}
-                    </select>
-                    <button type="submit" className="rounded-md bg-blue-600 px-3 py-1 text-sm text-white">
-                      Confirm
-                    </button>
-                  </form>
+                  <DraftConfirmForm
+                    draftId={draft.draft_id}
+                    choices={choices}
+                    tests={waitingTests}
+                    action={confirmAction}
+                  />
                   <form action={discardAction}>
                     <input type="hidden" name="draftId" value={draft.draft_id} />
                     <button type="submit" className="rounded-md border border-gray-300 px-3 py-1 text-sm dark:border-gray-600">

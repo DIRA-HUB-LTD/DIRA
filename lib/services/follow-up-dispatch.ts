@@ -90,7 +90,10 @@ export async function dispatchOneDueFollowUp(
   ) {
     throw new Error("Public demo call destination is not authorized");
   }
-  if (manualDemoJobId && (config.mode !== "demo" || !teacherContext)) {
+  // Manual demo jobs need a signed-in teacher's context. In real mode the claim query below
+  // additionally requires the job's school to be a demo workspace and the teacher to have a
+  // stored phone and consent, so a real school can never be reached this way.
+  if (manualDemoJobId && !teacherContext) {
     throw new Error("Manual demo dispatch requires an authorized demo context");
   }
   await markStuckInitiatingJobs(now);
@@ -336,7 +339,7 @@ async function claimDueFollowUp(
                $6::uuid IS NOT NULL
                AND job.follow_up_job_id = $6
                AND job.is_manual_demo = TRUE
-               AND $5::boolean = FALSE
+               AND ($5::boolean = FALSE OR school.is_demo = TRUE)
              )
              OR
              (
