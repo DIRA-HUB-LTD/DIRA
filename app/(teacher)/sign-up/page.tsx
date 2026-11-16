@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import SsoButtons from "@/components/auth/SsoButtons";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 
@@ -97,19 +98,19 @@ export default function SignUpPage() {
 
       {accountType && (
         <Card className="p-6">
-          <form onSubmit={submit} className="space-y-4">
-            {accountType === "enterprise" && (
-              <label className="block text-sm font-medium text-gray-800 dark:text-gray-200">
-                School or organisation name
-                <input
-                  className={inputClass}
-                  value={organisation}
-                  onChange={(event) => setOrganisation(event.target.value)}
-                  autoComplete="organization"
-                  required
-                />
-              </label>
-            )}
+          {accountType === "enterprise" && (
+            <label className="mb-4 block text-sm font-medium text-gray-800 dark:text-gray-200">
+              School or organisation name
+              <input
+                className={inputClass}
+                value={organisation}
+                onChange={(event) => setOrganisation(event.target.value)}
+                autoComplete="organization"
+              />
+            </label>
+          )}
+          <SsoButtons intent="signup" accountType={accountType} organisation={organisation} />
+          <form onSubmit={submit} className="mt-4 space-y-4">
             <label className="block text-sm font-medium text-gray-800 dark:text-gray-200">
               Your full name
               <input

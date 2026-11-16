@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import SsoButtons from "@/components/auth/SsoButtons";
+import { SSO_ERROR_MESSAGES } from "@/lib/auth/sso-messages";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 
@@ -10,6 +12,18 @@ export default function SignInPage() {
   const [pin, setPin] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // Microsoft / Google send people back here with ?error=<code> when sign-in did not work.
+  useEffect(() => {
+    const code = new URLSearchParams(window.location.search).get("error");
+    if (code) {
+      setError(
+        code in SSO_ERROR_MESSAGES
+          ? SSO_ERROR_MESSAGES[code as keyof typeof SSO_ERROR_MESSAGES]
+          : SSO_ERROR_MESSAGES.failed,
+      );
+    }
+  }, []);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -40,7 +54,10 @@ export default function SignInPage() {
           Sign in with your email (or the teacher ID your school administrator gave you) and your
           PIN. Signing an evidence summary requires a named, signed-in teacher.
         </p>
-        <form onSubmit={submit} className="mt-6 space-y-4">
+        <div className="mt-6">
+          <SsoButtons intent="signin" />
+        </div>
+        <form onSubmit={submit} className="mt-4 space-y-4">
           <label className="block text-sm font-medium text-gray-800 dark:text-gray-200">
             Email or teacher ID
             <input

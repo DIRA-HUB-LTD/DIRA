@@ -29,4 +29,5 @@ export const MIGRATIONS = [
   "db/013_teacher_sign_in.sql",
   "db/014_workspaces_sign_up.sql",
   "db/015_connect_calendar_and_import.sql",
+  "db/016_sso_identities.sql",
 ];
