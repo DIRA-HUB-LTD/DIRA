@@ -464,6 +464,14 @@ flowchart LR
 
 **P1 progress (14 Nov 2026, branch `feature/long-view-readiness`):** the workspace `packages/assessment-engine` exists (23 tests, isolation guard). Characterization snapshots (`tests/engine-characterization.test.mjs`) were recorded first and pass unchanged after the move. **Moved:** `corroborate` / `groupByCategory` (with `CorroborationConfig`), `fingerprint`, `validateCitations`, `verifyExcerpt`, `generateValidated`. **Adopted by DIRA:** `suggestTest.ts` (corroboration, fingerprint), `signed-summary.ts` (retry loop, citations), `call-observations.ts` (quote check). **Not yet:** the evidence-reasoning retry loop and the Suggest Test graph's validate node (both still have their own retry code; P6), the engine types and ports (`EvidenceStore`, `ModelPort`, ...), `runProposer`.
 
+**P2 / P3 / P7 first slices (16 Nov 2026, same branch):**
+- **Sign-up with a choice** (`/sign-up`): "individual teacher" creates a `personal` workspace with one admin teacher; "school or organisation" creates a `school` workspace and its first admin. One transaction, 6–8 digit PIN, sign in by email or teacher ID. Closed in production unless `DIRA_SIGN_UP_ENABLED=true`. Schema: `db/014`.
+- **After sign-up and sign-in, `/welcome`** until the workspace finishes or skips setup (`schools.setup_completed_at`).
+  - *Individual:* "Connect with Keeper" (OAuth 2.1 + PKCE through the MCP SDK; tokens encrypted at rest with `DIRA_CONNECTION_SECRET`; one read-only `get_event_count` test call). **Not yet run against live Keeper.**
+  - *School admin:* upload `staff.csv`, `learners.csv`, `timetable.csv` with a row-by-row validation, a preview that writes nothing, then one transaction; re-uploading updates instead of duplicating; new staff get a one-time PIN. Schema: `db/015`.
+- **S3 closed:** the agent-logs API is unreachable for a signed-in teacher in production.
+- **Still open:** phone OTP and email verification (emails are unverified, PIN only), invite links for staff, a PIN-change screen, coach role and codes, `canViewLearner` as one shared policy, closures and calendar generation (§6 steps 5–6), mapping calendar events to learner groups (§9 step 3), guardian consent for personal learners (D7), and bot protection on open sign-up.
+
 **Smallest useful first slice (about 1 week, on a fork or branch per §A.1):** C3 (Fetch working) + C5 (one-command run) + C2 (the cross-year fix). Judges can then clone the project, the borrowed MCP works, and the "long view" is visible across 2025 → 2026. **Next most valuable:** C1 + C7 (the real agent and the approval gate). Together they move the 30-point criterion and the sub-theme.
 
 ---

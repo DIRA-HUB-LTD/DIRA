@@ -36,6 +36,8 @@ export default defineConfig({
       "tests/model-provider.test.mjs",
       "tests/teacher-session.test.mjs",
       "tests/sign-up.test.mjs",
+      "tests/school-import.test.mjs",
+      "tests/calendar-connection.test.mjs",
       "tests/mcp-access.test.mjs",
       "tests/mcp-tools-inventory.test.mjs",
       "tests/signed-summary.test.mjs",

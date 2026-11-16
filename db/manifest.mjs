@@ -28,4 +28,5 @@ export const MIGRATIONS = [
   "db/012_mcp_api_tokens.sql",
   "db/013_teacher_sign_in.sql",
   "db/014_workspaces_sign_up.sql",
+  "db/015_connect_calendar_and_import.sql",
 ];
