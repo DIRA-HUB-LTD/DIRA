@@ -35,6 +35,7 @@ export default defineConfig({
       "tests/focus-rotation.test.mjs",
       "tests/model-provider.test.mjs",
       "tests/teacher-session.test.mjs",
+      "tests/sign-up.test.mjs",
       "tests/mcp-access.test.mjs",
       "tests/mcp-tools-inventory.test.mjs",
       "tests/signed-summary.test.mjs",

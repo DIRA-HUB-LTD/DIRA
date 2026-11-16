@@ -84,6 +84,8 @@ describe("teacher sign-in against the database", () => {
       teacher_id: "T_CUR",
       school_id: "SCH1",
       display_name: "Current Teacher",
+      role: "teacher",
+      workspace_kind: "school",
     });
     holder.cookie = token;
     expect(await getSignedInTeacher()).toEqual(teacher);

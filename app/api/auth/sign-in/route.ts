@@ -5,6 +5,7 @@ import { isSameOriginRequest } from "@/lib/auth/same-origin";
 import {
   SESSION_COOKIE,
   sessionCookieOptions,
+  postSignInDestination,
   SignInError,
   signInTeacher,
 } from "@/lib/auth/teacher-session";
@@ -29,14 +30,14 @@ export async function POST(request: NextRequest) {
   const parsed = bodySchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
-      { error: "Enter your teacher ID and a 4–8 digit PIN" },
+      { error: "Enter your email (or teacher ID) and your 4–8 digit PIN" },
       { status: 400 },
     );
   }
   try {
     const { teacher, token } = await signInTeacher(parsed.data.teacher_id, parsed.data.pin);
     (await cookies()).set(SESSION_COOKIE, token, sessionCookieOptions());
-    return NextResponse.json({ teacher });
+    return NextResponse.json({ teacher, next: await postSignInDestination(teacher.school_id) });
   } catch (error) {
     if (error instanceof SignInError) {
       const status =
