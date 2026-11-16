@@ -76,6 +76,8 @@ export class StoredOAuthProvider implements OAuthClientProvider {
       grant_types: ["authorization_code", "refresh_token"],
       response_types: ["code"],
       token_endpoint_auth_method: "none",
+      // Keeper's tools can also create and delete events. DIRA only ever reads, so ask for read.
+      scope: "keeper.read",
     };
   }
   state() {

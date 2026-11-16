@@ -57,6 +57,18 @@ connect flow, but it has **not been run against the live Keeper server**.
   single use, per-teacher binding, encryption at rest and disconnect, with Keeper's
   side of the handshake simulated. They do not prove that Keeper accepts our client.
 
+**Hosted, not self-hosted (checked against Keeper's docs on 16 Nov 2026).** Unlike the
+Fetch gateway, which DIRA runs itself, Keeper is a service each teacher already has an
+account with. The hosted server uses OAuth 2.1 with dynamic client registration, so DIRA
+needs no app registration, no client secret and no deployment. Access tokens last 30 days
+and refresh tokens 90. DIRA asks for the `keeper.read` scope only. The free plan allows
+**25 API/MCP requests per day per Keeper account** (the teacher's own allowance, not
+DIRA's), so DIRA must read a calendar once or twice a day, not on every page view.
+Self-hosting Keeper (AGPL-3.0) would only be needed to avoid that cap or to offer calendars
+without a Keeper account, and would mean running it and registering our own Google and
+Microsoft apps. A teacher also needs a Keeper account with a calendar added in Keeper
+before connecting.
+
 **The borrowed-MCP requirement is therefore met in code but unproven until one real
 connect and test call succeeds** with a test calendar (set `DIRA_CONNECTION_SECRET`,
 sign up as an individual, click Connect). Record the date and result here. Not built
