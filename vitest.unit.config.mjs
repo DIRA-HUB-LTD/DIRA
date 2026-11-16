@@ -42,6 +42,7 @@ export default defineConfig({
       "tests/demo-access.test.mjs",
       "tests/queue-from-timetable.test.mjs",
       "tests/db-client.test.mjs",
+      "tests/clean-list.test.mjs",
       "tests/mcp-access.test.mjs",
       "tests/mcp-tools-inventory.test.mjs",
       "tests/signed-summary.test.mjs",

@@ -29,7 +29,42 @@ import type {
 } from "@/lib/services/suggestion-workflow";
 
 const MAX_GENERATION_ATTEMPTS = 2;
-const MAX_ACTIVITY_DURATION_MINUTES = 60;
+// Teachers do short activities. Anything longer than one slot of a lesson is not run.
+const MAX_ACTIVITY_DURATION_MINUTES = 20;
+
+/**
+ * Models sometimes return a list as one string ("1. a 2. b"), or put numbering inside each
+ * item, which the page then numbers a second time. Turn either into clean separate items.
+ */
+export function cleanList(value: unknown): unknown {
+  const pieces = Array.isArray(value) ? value : typeof value === "string" ? [value] : null;
+  if (!pieces) return value;
+  const items: string[] = [];
+  for (const piece of pieces) {
+    if (typeof piece !== "string") return value;
+    const split = piece
+      .split(/\r?\n+|\s+(?=\d{1,2}[.)]\s+[A-Z])|\s*[•·]\s+/u)
+      .map((part) => part.replace(/^\s*(?:step\s*)?\d{1,2}\s*[.):-]\s*/iu, "").replace(/^[-*]\s+/u, "").trim())
+      .filter(Boolean);
+    items.push(...split);
+  }
+  return items;
+}
+
+// A nudge toward a different setting each time, so the same evidence does not keep
+// producing the same activity. The model may ignore it when it does not fit.
+const VARIETY_ANGLES = [
+  "a whole-class warm-up of a few minutes",
+  "pairs working for one short task",
+  "a quick written or drawn response instead of speaking",
+  "a movement or hands-on moment",
+  "the first five minutes of a lesson",
+  "the last five minutes of a lesson",
+  "a different subject from earlier suggestions",
+  "a change in who chooses (teacher, partner or the learner)",
+  "a change in the amount of thinking time",
+  "a change in how the task is presented (spoken, written, pictured)",
+];
 
 const generatedActivitySchema = z.object({
   exploration_question: z.string().trim().min(1).max(500),
@@ -39,12 +74,12 @@ const generatedActivitySchema = z.object({
     title: z.string().trim().min(1).max(200),
     duration_minutes: z.number().int().min(1).max(MAX_ACTIVITY_DURATION_MINUTES),
     purpose: z.string().trim().min(1).max(1_000),
-    steps: z.array(z.string().trim().min(1).max(500)).min(2).max(8),
-    what_to_observe: z.array(z.string().trim().min(1).max(500)).min(2).max(8),
+    steps: z.preprocess(cleanList, z.array(z.string().trim().min(1).max(300)).min(2).max(5)),
+    what_to_observe: z.preprocess(cleanList, z.array(z.string().trim().min(1).max(300)).min(1).max(4)),
     intended_outcome: z.string().trim().min(1).max(1_000),
-    assessment_criteria: z.array(z.string().trim().min(1).max(500)).min(1).max(6),
+    assessment_criteria: z.preprocess(cleanList, z.array(z.string().trim().min(1).max(300)).min(1).max(3)),
   }),
-  what_to_log_afterward: z.array(z.string().trim().min(1).max(500)).min(1).max(8),
+  what_to_log_afterward: z.preprocess(cleanList, z.array(z.string().trim().min(1).max(300)).min(1).max(3)),
   educational_reference_keys: z.array(z.enum(["IB", "EEF", "AMI", "WWC"])).max(4),
 });
 
@@ -544,14 +579,17 @@ function createSuggestionGraph(tools: SuggestionToolSession) {
             "Use no names or learner identifiers. Do not fabricate observations, ages, resource claims, or citations.",
             "A source may be cited only by returning its key when its supplied status is success and it has an excerpt and URL. Return no reference keys when no such source was retrieved.",
             "Use previous suggestions, statuses, and rejection reasons to avoid repeating an unsuitable activity when a meaningfully different one is appropriate.",
-            "Activity must be feasible in a regular classroom, inclusive, safe, and at most 60 minutes. Supply steps, observable assessment criteria, intended outcome, and what the teacher should log.",
+            "The activity must be SHORT so a busy teacher actually does it: 10 to 15 minutes (never more than 20), inside a normal lesson, needing no preparation and no materials beyond paper, pencils and what a classroom already has. It may compare two brief moments inside the same lesson, but never needs two sessions or a separate setup.",
+            "Keep every field brief and plain. Title under 8 words. Purpose one sentence. 3 or 4 steps, each one short sentence a teacher can follow without reading twice. 2 or 3 things to observe. 1 or 2 assessment criteria. 2 things to log. Each step is its own array item with no numbering in the text.",
+            "Be inclusive and safe: address the whole class or pairs, never a named learner.",
+            "Suggest something genuinely different from every previous suggestion: change the variable being explored, not just the wording. A suggested_angle is given as a nudge; use it when it fits.",
             "Return only a JSON object with exploration_question, hypothesis, reason, suggested_activity (title, duration_minutes, purpose, steps, what_to_observe, intended_outcome, assessment_criteria), what_to_log_afterward, and educational_reference_keys.",
             "Do not return chain-of-thought.",
           ].join(" "),
         },
         {
           role: "user",
-          content: `${state.modelContext}\n${validationFeedback}`,
+          content: `${state.modelContext}\nsuggested_angle: ${VARIETY_ANGLES[Math.floor(Math.random() * VARIETY_ANGLES.length)]}\n${validationFeedback}`,
         },
       ];
       let completion: Awaited<ReturnType<typeof createAgentCompletion>>;
@@ -560,6 +598,8 @@ function createSuggestionGraph(tools: SuggestionToolSession) {
           runId: state.runId,
           workflow: "suggest_test",
           attempt,
+          // Higher than the default so repeated requests on the same evidence vary.
+          temperature: 0.7,
         });
       } catch (error) {
         stageLog(state.runId, "glm_generation", "failed", {

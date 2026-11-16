@@ -122,6 +122,8 @@ export interface ModelCallContext {
   runId: string;
   workflow: string;
   attempt?: number;
+  /** Sampling temperature for this call; defaults to a low, repeatable 0.2. */
+  temperature?: number;
 }
 
 export class GlmConfigurationError extends Error {
@@ -249,6 +251,7 @@ function parseCompletion(value: unknown): AgentCompletion {
 async function requestAgentCompletion(
   messages: AgentMessage[],
   tools: AgentFunctionTool[],
+  temperature = 0.2,
 ): Promise<AgentCompletion> {
   const config = resolveModelConfig();
   const apiKey = process.env[config.apiKeyEnv]?.trim();
@@ -289,7 +292,7 @@ async function requestAgentCompletion(
                 tool_choice: "auto",
               }
             : {}),
-          temperature: 0.2,
+          temperature,
           stream: false,
         }),
         signal,
@@ -338,7 +341,7 @@ export async function createAgentCompletion(
       resolveModelConfig(); // throws the specific configuration error
       throw new GlmConfigurationError("The model provider is not configured");
     }
-    const completion = await requestAgentCompletion(messages, tools);
+    const completion = await requestAgentCompletion(messages, tools, context?.temperature);
     if (context) {
       await logAgentEvent({
         run_id: context.runId,
