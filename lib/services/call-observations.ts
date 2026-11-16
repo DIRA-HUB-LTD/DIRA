@@ -216,17 +216,11 @@ export async function listDrafts(context: LogObservationContext): Promise<DraftR
       WHERE teacher_id = $1 AND school_id = $2 AND status <> 'discarded'
       ORDER BY created_at DESC, segment_index
       LIMIT 100`,
-    [context.teacher_id],
+    [context.teacher_id, context.school_id],
   );
   return result.rows;
 }
 
-/**
- * Teacher confirms a draft: this is the only path from draft to real observation.
- * The learner must be the single unambiguous candidate or an explicit teacher choice
- * from their own roster. The existing logObservation does the write; its submission_id
- * (derived from the draft id) makes repeated confirmations return the same observation.
- */
 /**
  * Accepted tests this teacher is waiting to hear the outcome of. A confirmed draft can be
  * recorded as one of these outcomes (completing the test); only ACCEPTED tests can be.
@@ -253,6 +247,12 @@ export async function listOpenTests(context: LogObservationContext): Promise<Ope
   return result.rows;
 }
 
+/**
+ * Teacher confirms a draft: this is the only path from draft to real observation.
+ * The learner must be the single unambiguous candidate or an explicit teacher choice
+ * from their own roster. The existing logObservation does the write; its submission_id
+ * (derived from the draft id) makes repeated confirmations return the same observation.
+ */
 export async function confirmDraft(
   draftId: string,
   learnerId: string | undefined,

@@ -20,7 +20,7 @@ vi.mock("../lib/external-mcp/voice.ts", () => ({
 
 const { queueDemoWorkspaceCall, DemoCallError } = await import("../lib/services/follow-up-queue.ts");
 const { dispatchOneDueFollowUp } = await import("../lib/services/follow-up-dispatch.ts");
-const { confirmDraft, listOpenTests } = await import("../lib/services/call-observations.ts");
+const { confirmDraft, listDrafts, listOpenTests } = await import("../lib/services/call-observations.ts");
 
 const NUMBER = "+254700000001";
 const context = { teacher_id: "T_CUR", school_id: "SCH1" };
@@ -163,6 +163,12 @@ describe("tying a call draft to the right learner and test", () => {
   });
   afterAll(async () => {
     await database?.close();
+  });
+
+  it("lists this teacher's drafts (the Call Drafts page depends on it)", async () => {
+    const drafts = await listDrafts(context);
+    expect(drafts.map((draft) => draft.draft_id)).toEqual([draftId]);
+    expect(await listDrafts({ teacher_id: "T_OTHER", school_id: "SCH1" })).toEqual([]);
   });
 
   it("lists only this teacher's accepted tests", async () => {
