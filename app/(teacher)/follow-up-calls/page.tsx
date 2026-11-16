@@ -149,19 +149,6 @@ export default async function FollowUpCallsPage({
   const { demoCall } = await searchParams;
   await connection();
 
-  if (
-    process.env.NODE_ENV === "production" &&
-    process.env.DIRA_DEMO_MODE !== "true"
-  ) {
-    return (
-      <Card className="p-6">
-        <h1 className="text-xl font-semibold">Follow-up activity unavailable</h1>
-        <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
-          This demo page requires a real authenticated teacher session, which is not configured.
-        </p>
-      </Card>
-    );
-  }
 
   try {
     const context = await resolveTeacherContext();

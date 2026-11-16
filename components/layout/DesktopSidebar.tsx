@@ -35,7 +35,7 @@ export default function DesktopSidebar() {
         </nav>
         <div className="mt-auto px-4 py-4 border-t border-gray-200 dark:border-gray-700 rounded-b-lg">
           <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 shrink-0 rounded-full bg-blue-600"></div>
+            <div className="w-8 h-8 shrink-0 rounded-full bg-dira-teal"></div>
             <SignInStatus />
           </div>
         </div>

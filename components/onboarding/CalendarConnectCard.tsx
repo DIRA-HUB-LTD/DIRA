@@ -62,6 +62,27 @@ export default function CalendarConnectCard({ configured, status, justReturned }
         or notes, and it never writes to your calendar. The link goes through Keeper, which supports
         Google Calendar, Outlook, iCloud and others.
       </p>
+      {!connected && (
+        <div className="mt-3 rounded-md border border-dira-amber/60 bg-dira-amber/10 p-3 text-sm text-gray-800 dark:text-gray-200">
+          <p className="font-medium">Before you connect, you need a free Keeper account.</p>
+          <ol className="mt-1 list-decimal space-y-0.5 pl-5">
+            <li>
+              Create one at{" "}
+              <a
+                href="https://www.keeper.sh"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-dira-teal underline dark:text-dira-amber"
+              >
+                keeper.sh
+              </a>{" "}
+              (opens in a new tab).
+            </li>
+            <li>In Keeper, add the calendar you teach from (Google, Outlook, iCloud or similar).</li>
+            <li>Come back here and click Connect with Keeper. Keeper will ask you to approve read-only access.</li>
+          </ol>
+        </div>
+      )}
       {!configured && (
         <p className="mt-3 text-sm text-amber-700 dark:text-amber-400">
           Calendar connection is not switched on for this server yet.

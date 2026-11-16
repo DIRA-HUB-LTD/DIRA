@@ -30,4 +30,5 @@ export const MIGRATIONS = [
   "db/014_workspaces_sign_up.sql",
   "db/015_connect_calendar_and_import.sql",
   "db/016_sso_identities.sql",
+  "db/017_demo_workspace_and_tour.sql",
 ];

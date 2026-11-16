@@ -1,5 +1,15 @@
 @import 'tailwindcss';
 
+/* DIRA's logo palette: deep teal, amber, leaf green, cream. */
+@theme {
+  --color-dira-teal: #1f5f57;
+  --color-dira-teal-deep: #164a44;
+  --color-dira-amber: #e9a23b;
+  --color-dira-amber-deep: #c9821f;
+  --color-dira-leaf: #5f9e4e;
+  --color-dira-cream: #fbf8f2;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
