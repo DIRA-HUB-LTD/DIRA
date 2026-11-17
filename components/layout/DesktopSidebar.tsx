@@ -3,6 +3,7 @@ import Link from "next/link";
 import SignInStatus from "@/components/auth/SignInStatus";
 
 const navigation = [
+  { name: "Dashboard", href: "/dashboard", current: false },
   { name: "This Week", href: "/this-week", current: false },
   { name: "Follow-up Activity", href: "/follow-up-calls", current: false },
   { name: "Call Drafts", href: "/call-drafts", current: false },
