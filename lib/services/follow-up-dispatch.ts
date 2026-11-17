@@ -176,13 +176,13 @@ export async function dispatchOneDueFollowUp(
            last_error_code = $3,
            updated_at = NOW()
        WHERE follow_up_job_id = $1 AND status = 'initiating'`,
-      [claimed.follow_up_job_id, status, callError.code],
+      [claimed.follow_up_job_id, status, callError.detail ? `${callError.code}: ${callError.detail}` : callError.code],
     );
 
     return {
       follow_up_job_id: claimed.follow_up_job_id,
       status,
-      error_code: callError.code,
+      error_code: callError.detail ? `${callError.code}: ${callError.detail}` : callError.code,
       is_demo: config.mode === "demo",
     };
   }

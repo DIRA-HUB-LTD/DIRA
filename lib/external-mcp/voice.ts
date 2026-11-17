@@ -33,6 +33,8 @@ export interface AfricaTalkingCallResult {
 
 export class AfricaTalkingCallError extends Error {
   readonly code: "provider_rejected" | "outcome_unknown";
+  /** Africa's Talking's own short reason (e.g. "InsufficientCredit"), digits removed. */
+  detail?: string;
 
   constructor(
     message: string,
@@ -86,18 +88,29 @@ export async function initiateAfricaTalkingCall(
       },
     );
 
-    // The provider SDK documents only 200 and 201 as accepted call submissions.
+    // Africa's Talking answers 200 even when it refuses a call, and says why in the body:
+    // entries[0].status is "Queued" only when the call was really placed.
     if (response.status === 200 || response.status === 201) {
-      return {
-        httpStatus: response.status,
-        sessionId: await readSessionId(response),
-      };
+      const text = await response.text().catch(() => "");
+      const outcome = readCallOutcome(text);
+      if (outcome.refused) {
+        const error = new AfricaTalkingCallError(
+          "Africa's Talking refused the call request",
+          "provider_rejected",
+        );
+        error.detail = outcome.reason;
+        throw error;
+      }
+      return { httpStatus: response.status, sessionId: outcome.sessionId };
     }
     if (response.status >= 400 && response.status < 500) {
-      throw new AfricaTalkingCallError(
+      const text = await response.text().catch(() => "");
+      const error = new AfricaTalkingCallError(
         "Africa's Talking rejected the call request",
         "provider_rejected",
       );
+      error.detail = `http_${response.status}${text ? `: ${safeReason(text)}` : ""}`;
+      throw error;
     }
 
     throw new AfricaTalkingCallError(
@@ -120,29 +133,53 @@ export async function initiateAfricaTalkingCall(
   }
 }
 
+/** A short, log-safe reason: no digit runs (phone numbers), one line, at most 90 characters. */
+export function safeReason(value: string): string {
+  return value
+    .replace(/\d{5,}/g, "…")
+    .replace(/[^A-Za-z0-9 .,:_'()…-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 90);
+}
+
 /**
- * Extract entries[0].sessionId from the /call response body.
- * Response shape is from secondary sources (official docs unavailable): VERIFY against
- * a real response. A missing/odd body returns null rather than failing an accepted call.
+ * Read the /call reply: { entries: [{ status, sessionId, phoneNumber }], errorMessage }.
+ * Refused when the first entry's status is not "Queued", or when errorMessage says so.
  */
-async function readSessionId(response: Response): Promise<string | null> {
+export function readCallOutcome(text: string): {
+  refused: boolean;
+  reason?: string;
+  sessionId: string | null;
+} {
+  let parsed: unknown;
   try {
-    const parsed: unknown = await response.json();
-    const entries =
-      typeof parsed === "object" && parsed !== null
-        ? (parsed as { entries?: unknown }).entries
-        : null;
-    const first = Array.isArray(entries) ? entries[0] : null;
-    const sessionId =
-      typeof first === "object" && first !== null
-        ? (first as { sessionId?: unknown }).sessionId
-        : null;
-    return typeof sessionId === "string" && /^[A-Za-z0-9_.-]{1,100}$/.test(sessionId)
-      ? sessionId
-      : null;
+    parsed = JSON.parse(text);
   } catch {
-    return null;
+    return { refused: false, sessionId: null };
   }
+  const body = (typeof parsed === "object" && parsed !== null ? parsed : {}) as {
+    entries?: unknown;
+    errorMessage?: unknown;
+  };
+  const first = Array.isArray(body.entries) ? body.entries[0] : null;
+  const entry = (typeof first === "object" && first !== null ? first : {}) as {
+    status?: unknown;
+    sessionId?: unknown;
+  };
+  const status = typeof entry.status === "string" ? entry.status : null;
+  const topError =
+    typeof body.errorMessage === "string" && body.errorMessage.trim() && body.errorMessage !== "None"
+      ? body.errorMessage
+      : null;
+  const sessionId =
+    typeof entry.sessionId === "string" && /^[A-Za-z0-9_.-]{1,100}$/.test(entry.sessionId) && entry.sessionId !== "None"
+      ? entry.sessionId
+      : null;
+  if ((status && status !== "Queued") || (!status && topError)) {
+    return { refused: true, reason: safeReason(status ?? topError ?? "refused"), sessionId: null };
+  }
+  return { refused: false, sessionId };
 }
 
 /**
