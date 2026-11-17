@@ -171,6 +171,21 @@ function describeDemoCall(code: string): string {
   }
 }
 
+/** Plain-language next step for the reasons Africa's Talking gives most often. */
+function explainProviderReason(reason: string): string {
+  const r = reason.toLowerCase();
+  if (r.includes("http_401") || r.includes("authentication")) {
+    return "The API key or username is wrong, or the key was regenerated: check both in Vercel, then redeploy.";
+  }
+  if (r.includes("credit") || r.includes("balance")) return "Top up the Africa's Talking account.";
+  if (r.includes("callerid") || r.includes("caller") || r.includes("from")) {
+    return "AFRICASTALKING_VOICE_FROM must be a voice number owned by this Africa's Talking app, in +254 format.";
+  }
+  if (r.includes("phonenumber") || r.includes("destination")) return "The teacher's phone number was refused.";
+  if (r.includes("http_403")) return "This app is not allowed to place voice calls yet: check the voice product is activated.";
+  return "Check the Africa's Talking dashboard for this app.";
+}
+
 function describeQueueOutcome(outcome: string): string {
   if (outcome.startsWith("ok:")) {
     const [, queued, refreshed] = outcome.split(":");
@@ -209,10 +224,12 @@ async function placeWorkspaceDemoCallAction() {
   }
   const context = { teacher_id: teacher.teacher_id, school_id: teacher.school_id };
   let outcome = "unavailable";
+  let reason = "";
   try {
     const queued = await queueDemoWorkspaceCall(context);
     const result = await dispatchOneDueFollowUp(new Date(), context, queued.follow_up_job_id);
     outcome = result?.status ?? "not_queued";
+    reason = result?.error_code ?? "";
   } catch (error) {
     if (error instanceof DemoCallError) {
       outcome = error.code;
@@ -223,7 +240,9 @@ async function placeWorkspaceDemoCallAction() {
     }
   }
   revalidatePath("/follow-up-calls");
-  redirect(`/follow-up-calls?demoCall=${outcome}`);
+  redirect(
+    `/follow-up-calls?demoCall=${outcome}${reason ? `&reason=${encodeURIComponent(reason.slice(0, 120))}` : ""}`,
+  );
 }
 
 /** Queue an immediate demo-only job; it does not call the phone. */
@@ -276,9 +295,9 @@ async function dispatchDemoCallAction(formData: FormData) {
 export default async function FollowUpCallsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ demoCall?: string; queued?: string }>;
+  searchParams: Promise<{ demoCall?: string; queued?: string; reason?: string }>;
 }) {
-  const { demoCall, queued } = await searchParams;
+  const { demoCall, queued, reason } = await searchParams;
   const signedIn = await getSignedInTeacher();
   let isDemoWorkspace = false;
   if (signedIn) {
@@ -468,6 +487,11 @@ export default async function FollowUpCallsPage({
         {demoCall && (
           <Card className="border border-blue-300 p-4 text-sm text-blue-900 dark:border-blue-800 dark:text-blue-200" role="status">
             {describeDemoCall(demoCall)}
+            {reason && (
+              <span className="mt-1 block text-xs">
+                Africa&apos;s Talking said: <code>{reason}</code>. {explainProviderReason(reason)}
+              </span>
+            )}
           </Card>
         )}
 
