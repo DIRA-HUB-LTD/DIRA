@@ -5,6 +5,7 @@ import DemoAccessButton from "@/components/landing/DemoAccessButton";
 import PricingFaq from "@/components/landing/PricingFaq";
 import PricingSection from "@/components/landing/PricingSection";
 import RoiCalculator from "@/components/landing/RoiCalculator";
+import TeamSection from "@/components/landing/TeamSection";
 import DemoCallDialog from "@/components/voice/DemoCallDialog";
 import { getSignedInTeacher } from "@/lib/auth/teacher-session";
 import { isProductionPublicDemoVoiceEnabled } from "@/lib/services/voice-config";
@@ -212,6 +213,8 @@ export default async function LandingPage() {
           .
         </p>
       </section>
+
+      <TeamSection />
     </div>
   );
 }
