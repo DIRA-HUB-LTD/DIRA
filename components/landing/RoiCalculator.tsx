@@ -234,19 +234,21 @@ export default function RoiCalculator() {
             <div className="rounded-lg bg-dira-cream p-4 dark:bg-gray-800">
               <p className="text-3xl font-bold text-dira-teal-deep dark:text-gray-50">KSh {KSH.format(Math.round(valueSaved))}</p>
               <p className="mt-1 text-sm text-gray-800 dark:text-gray-200">
-                of teacher time each term, at a monthly pay of{" "}
+                is what that teacher time is worth each term.
+              </p>
+              <p className="mt-2 text-xs text-gray-600 dark:text-gray-400">
                 <label className="inline">
-                  <span className="sr-only">Monthly teacher pay in shillings</span>
-                  KSh{" "}
+                  Based on a teacher earning KSh{" "}
                   <input
                     type="number"
                     min={0}
                     value={monthlyPay}
                     onChange={(event) => setMonthlyPay(Math.max(0, Number(event.target.value) || 0))}
-                    className="w-24 rounded border border-gray-300 bg-white px-1 py-0.5 text-sm dark:border-gray-600 dark:bg-gray-900"
-                  />
+                    aria-label="A teacher's monthly pay in shillings"
+                    className="w-24 rounded border border-gray-300 bg-white px-1 py-0.5 text-xs dark:border-gray-600 dark:bg-gray-900"
+                  />{" "}
+                  a month. Change it to match your school.
                 </label>
-                .
               </p>
             </div>
           </div>
