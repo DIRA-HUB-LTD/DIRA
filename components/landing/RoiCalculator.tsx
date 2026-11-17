@@ -5,7 +5,6 @@ import { useState } from "react";
 
 // Planning figures, shown to the visitor in the result so nothing is hidden.
 const MINUTES_WITH_DIRA = 6; // confirm a couple of drafts, read the card, write the comment
-const WORK_MINUTES_PER_MONTH = 173 * 60;
 const PRICE_PER_LEARNER = 200;
 const PRICE_CAP_PER_SCHOOL = 80_000;
 
@@ -23,6 +22,13 @@ const CARRY_OVER = [
   { value: "0.5", label: "About half" },
   { value: "0.75", label: "Most of it" },
 ] as const;
+
+const CARRY_TEXT: Record<string, string> = {
+  "0": "almost nothing",
+  "0.25": "only a little",
+  "0.5": "about half",
+  "0.75": "most",
+};
 
 const KSH = new Intl.NumberFormat("en-KE", { maximumFractionDigits: 0 });
 
@@ -112,15 +118,15 @@ export default function RoiCalculator() {
   const [minutesToday, setMinutesToday] = useState(20);
   const [teachers, setTeachers] = useState(10);
   const [carry, setCarry] = useState<(typeof CARRY_OVER)[number]["value"] | "">("");
-  const [monthlyPay, setMonthlyPay] = useState(20_000);
+  const [termFee, setTermFee] = useState(15_000);
+  const [hourlyRate, setHourlyRate] = useState(500);
 
   const learners = classSize * teachers;
   const unseen = Math.max(0, classSize - Math.min(describable, classSize)) * teachers;
   const hoursToday = (minutesToday * learners) / 60;
   const hoursSaved = (Math.max(0, minutesToday - MINUTES_WITH_DIRA) * learners) / 60;
-  const valueSaved = hoursSaved * 60 * (monthlyPay / WORK_MINUTES_PER_MONTH);
-  const restartEachYear = Math.round(learners * (1 - Number(carry || 0)));
   const price = Math.min(PRICE_PER_LEARNER * learners, PRICE_CAP_PER_SCHOOL);
+  const breakEven = Math.max(1, Math.ceil(price / termFee));
   const reply = WHERE_NOTES_LIVE.find((option) => option.value === whereNotes)?.reply;
 
   const canContinue =
@@ -203,66 +209,99 @@ export default function RoiCalculator() {
       )}
 
       {step === 3 && (
-        <div className="mt-6 space-y-5">
+        <div className="mt-6 space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className="rounded-lg bg-dira-cream p-4 dark:bg-gray-800">
-              <p className="text-3xl font-bold text-dira-teal-deep dark:text-gray-50">{KSH.format(unseen)}</p>
-              <p className="mt-1 text-sm text-gray-800 dark:text-gray-200">
-                learners in your school nobody could describe today: the quiet middle of every class.
-                With DIRA each teacher gets a list of ten every fortnight, starting with whoever has
-                gone longest unseen, so every learner comes up at least once every{" "}
-                {Math.max(2, Math.ceil(classSize / 10) * 2)} weeks.
+            <div className="rounded-lg bg-dira-cream p-5 dark:bg-gray-800">
+              <p className="text-xs font-semibold uppercase tracking-wide text-dira-amber-deep">The quiet middle</p>
+              <p className="mt-1 text-4xl font-bold text-dira-teal-deep dark:text-gray-50">
+                {KSH.format(unseen)} <span className="text-lg font-semibold">learners</span>
+              </p>
+              <p className="mt-1 text-sm font-medium text-gray-900 dark:text-gray-100">
+                that no teacher could describe today, out of {KSH.format(learners)}.
+              </p>
+              <p className="mt-2 text-sm text-gray-700 dark:text-gray-300">
+                Not the top of the class, not the ones who struggle: the middle. With DIRA each teacher
+                gets ten learners every fortnight, starting with whoever has gone longest unseen, so every
+                learner comes up at least once every {Math.max(2, Math.ceil(classSize / 10) * 2)} weeks.
               </p>
             </div>
-            <div className="rounded-lg bg-dira-cream p-4 dark:bg-gray-800">
-              <p className="text-3xl font-bold text-dira-teal-deep dark:text-gray-50">
-                {KSH.format(Math.round(hoursSaved))} hours
+            <div className="rounded-lg bg-dira-cream p-5 dark:bg-gray-800">
+              <p className="text-xs font-semibold uppercase tracking-wide text-dira-amber-deep">Starting from zero</p>
+              <p className="mt-1 text-4xl font-bold text-dira-teal-deep dark:text-gray-50">Every learner</p>
+              <p className="mt-1 text-sm font-medium text-gray-900 dark:text-gray-100">
+                meets a new teacher each year who knows {CARRY_TEXT[carry || "0"]} of what the last one knew.
               </p>
-              <p className="mt-1 text-sm text-gray-800 dark:text-gray-200">
-                back each term across your teachers (about {KSH.format(Math.round(hoursSaved / teachers))} each),
-                out of {KSH.format(Math.round(hoursToday))} hours spent on comments and records today.
-                Comments are written from dated evidence instead of from memory.
-              </p>
-            </div>
-            <div className="rounded-lg bg-dira-cream p-4 dark:bg-gray-800">
-              <p className="text-3xl font-bold text-dira-teal-deep dark:text-gray-50">{KSH.format(restartEachYear)}</p>
-              <p className="mt-1 text-sm text-gray-800 dark:text-gray-200">
-                learners a year who start again from zero with a new teacher. With DIRA their record
-                moves up with them: what was wondered, what was tried, and what happened.
-              </p>
-            </div>
-            <div className="rounded-lg bg-dira-cream p-4 dark:bg-gray-800">
-              <p className="text-3xl font-bold text-dira-teal-deep dark:text-gray-50">KSh {KSH.format(Math.round(valueSaved))}</p>
-              <p className="mt-1 text-sm text-gray-800 dark:text-gray-200">
-                is what that teacher time is worth each term.
-              </p>
-              <p className="mt-2 text-xs text-gray-600 dark:text-gray-400">
-                <label className="inline">
-                  Based on a teacher earning KSh{" "}
-                  <input
-                    type="number"
-                    min={0}
-                    value={monthlyPay}
-                    onChange={(event) => setMonthlyPay(Math.max(0, Number(event.target.value) || 0))}
-                    aria-label="A teacher's monthly pay in shillings"
-                    className="w-24 rounded border border-gray-300 bg-white px-1 py-0.5 text-xs dark:border-gray-600 dark:bg-gray-900"
-                  />{" "}
-                  a month. Change it to match your school.
-                </label>
+              <p className="mt-2 text-sm text-gray-700 dark:text-gray-300">
+                That is all {KSH.format(learners)} of your learners, the strongest included. With DIRA the
+                record moves up with them: what was wondered, what was tried, and what happened.
               </p>
             </div>
           </div>
-          <p className="text-sm text-gray-700 dark:text-gray-300">
-            For {KSH.format(learners)} learners, DIRA would cost your school{" "}
-            <strong>KSh {KSH.format(price)} a term</strong>
-            {price === PRICE_CAP_PER_SCHOOL ? " (the cap for a whole school)" : ""}.{" "}
-            {valueSaved >= price
-              ? "The teacher time alone covers it, before counting the learners who are now seen."
-              : "The bigger return is the one the time doesn't count: a written record for every learner that stays when a teacher leaves."}
-          </p>
+
+          <div className="rounded-lg bg-dira-teal p-5 text-white">
+            <p className="text-xs font-semibold uppercase tracking-wide text-dira-amber">Time back</p>
+            <p className="mt-1 text-4xl font-bold">
+              {KSH.format(Math.round(hoursSaved))} hours <span className="text-lg font-semibold">every term</span>
+            </p>
+            <p className="mt-2 text-sm text-white/90">
+              About {KSH.format(Math.round(hoursSaved / teachers))} hours per teacher, out of{" "}
+              {KSH.format(Math.round(hoursToday))} hours your school spends on comments and records today.
+              That is time for lesson planning, curriculum development, teacher training, and one-to-one
+              time with the learners who need it most. And the comments are written from dated evidence,
+              not from memory.
+            </p>
+          </div>
+
+          <div className="rounded-lg border border-dira-teal/20 p-5 dark:border-gray-700">
+            <p className="text-sm font-semibold text-dira-teal-deep dark:text-gray-50">What it&apos;s worth</p>
+            <div className="mt-3 grid gap-4 sm:grid-cols-2">
+              <div className="text-sm text-gray-700 dark:text-gray-300">
+                <p className="font-medium text-gray-900 dark:text-gray-100">For your school</p>
+                <p className="mt-1">
+                  Parents stay where their child is truly known. For {KSH.format(learners)} learners DIRA
+                  costs KSh {KSH.format(price)} a term
+                  {price === PRICE_CAP_PER_SCHOOL ? " (the whole-school cap)" : ""}, so it pays for itself
+                  if it helps you keep or win{" "}
+                  <strong>{breakEven} {breakEven === 1 ? "learner" : "learners"}</strong>.
+                </p>
+                <label className="mt-2 block text-xs text-gray-600 dark:text-gray-400">
+                  Your fee per learner per term: KSh{" "}
+                  <input
+                    type="number"
+                    min={1}
+                    value={termFee}
+                    onChange={(event) => setTermFee(Math.max(1, Number(event.target.value) || 1))}
+                    aria-label="Your fee per learner per term in shillings"
+                    className="w-24 rounded border border-gray-300 bg-white px-1 py-0.5 text-xs dark:border-gray-600 dark:bg-gray-900"
+                  />
+                </label>
+              </div>
+              <div className="text-sm text-gray-700 dark:text-gray-300">
+                <p className="font-medium text-gray-900 dark:text-gray-100">For private tutors and coaches</p>
+                <p className="mt-1">
+                  Your time is your income. {KSH.format(Math.round(hoursSaved))} hours a term is about{" "}
+                  <strong>KSh {KSH.format(Math.round(hoursSaved * hourlyRate))}</strong> of sessions you
+                  could teach instead of writing up notes.
+                </p>
+                <label className="mt-2 block text-xs text-gray-600 dark:text-gray-400">
+                  Your rate per hour: KSh{" "}
+                  <input
+                    type="number"
+                    min={0}
+                    value={hourlyRate}
+                    onChange={(event) => setHourlyRate(Math.max(0, Number(event.target.value) || 0))}
+                    aria-label="Your hourly rate in shillings"
+                    className="w-20 rounded border border-gray-300 bg-white px-1 py-0.5 text-xs dark:border-gray-600 dark:bg-gray-900"
+                  />{" "}
+                  (working alone? answer 1 for the number of teachers)
+                </label>
+              </div>
+            </div>
+          </div>
+
           <p className="text-xs text-gray-500 dark:text-gray-400">
             Rough estimates from your answers. We assume about {MINUTES_WITH_DIRA} minutes per learner
-            per term with DIRA and a {Math.round(WORK_MINUTES_PER_MONTH / 60)}-hour working month.
+            per term with DIRA.
           </p>
           <div className="flex flex-wrap gap-3">
             <Link href="/sign-up" className="rounded-md bg-dira-teal px-5 py-3 text-sm font-semibold text-white hover:bg-dira-teal-deep">
