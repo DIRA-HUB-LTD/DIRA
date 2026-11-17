@@ -44,6 +44,7 @@ export default defineConfig({
       "tests/db-client.test.mjs",
       "tests/clean-list.test.mjs",
       "tests/demo-workspace-call.test.mjs",
+      "tests/impact-dashboard.test.mjs",
       "tests/mcp-access.test.mjs",
       "tests/mcp-tools-inventory.test.mjs",
       "tests/signed-summary.test.mjs",

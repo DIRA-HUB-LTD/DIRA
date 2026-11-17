@@ -2,6 +2,9 @@ import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import DemoAccessButton from "@/components/landing/DemoAccessButton";
+import PricingFaq from "@/components/landing/PricingFaq";
+import PricingSection from "@/components/landing/PricingSection";
+import RoiCalculator from "@/components/landing/RoiCalculator";
 import DemoCallDialog from "@/components/voice/DemoCallDialog";
 import { getSignedInTeacher } from "@/lib/auth/teacher-session";
 import { isProductionPublicDemoVoiceEnabled } from "@/lib/services/voice-config";
@@ -159,6 +162,11 @@ export default async function LandingPage() {
           ))}
         </div>
       </section>
+
+      {/* What would change, then the price, then questions about the price */}
+      <RoiCalculator />
+      <PricingSection />
+      <PricingFaq />
 
       {/* Try it */}
       <section className="rounded-xl border border-dira-teal/15 bg-white p-6 dark:border-gray-800 dark:bg-gray-900 sm:p-8">
