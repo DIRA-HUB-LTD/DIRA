@@ -23,6 +23,14 @@ import {
   isVoiceDemoMode,
 } from "@/lib/services/voice-config";
 import DemoCallDialog from "@/components/voice/DemoCallDialog";
+import DemoCallNumberForm from "@/components/voice/DemoCallNumberForm";
+import {
+  finishWorkspaceCall,
+  latestCallStatus,
+  normalisePhone,
+  reserveWorkspaceCall,
+  WorkspaceCallLimitError,
+} from "@/lib/services/workspace-demo-call";
 
 interface FollowUpCallRow {
   follow_up_job_id: string;
@@ -144,6 +152,15 @@ async function queueTodaysCallsAction(formData: FormData) {
   redirect(`/follow-up-calls?queued=${encodeURIComponent(outcome)}`);
 }
 
+const CALL_STATUS_TEXT: Record<string, string> = {
+  requested: "requested, waiting for the phone network",
+  ringing: "ringing",
+  in_progress: "answered, in progress",
+  completed: "answered and recorded",
+  not_answered: "not answered (it rang but nobody picked up, or the phone was off)",
+  failed: "failed on the phone network: check the number",
+};
+
 function describeDemoCall(code: string): string {
   switch (code) {
     case "queued":
@@ -166,6 +183,10 @@ function describeDemoCall(code: string): string {
       return "The daily limit of demo calls has been reached. Try again tomorrow.";
     case "disabled":
       return "Demo calls are switched off on this server.";
+    case "invalid_number":
+      return "That number can't be called yet.";
+    case "number_limit":
+      return "This number has had its three demo calls for today. Try another number, or again tomorrow.";
     default:
       return "The demo call could not be placed. Check the Africa's Talking settings, then try again.";
   }
@@ -181,7 +202,13 @@ function explainProviderReason(reason: string): string {
   if (r.includes("callerid") || r.includes("caller") || r.includes("from")) {
     return "AFRICASTALKING_VOICE_FROM must be a voice number owned by this Africa's Talking app, in +254 format.";
   }
-  if (r.includes("phonenumber") || r.includes("destination")) return "The teacher's phone number was refused.";
+  if (r.includes("invalidphonenumber") || r.includes("invalid phone")) {
+    return "Africa's Talking says this isn't a number it can call. Check the country code and the digits, then try again.";
+  }
+  if (r.includes("notsupported") || r.includes("not supported") || r.includes("destination")) {
+    return "Africa's Talking can't call numbers in that country from this account. Try a Kenyan number.";
+  }
+  if (r.includes("phonenumber")) return "The phone number was refused. Check the country code and the digits.";
   if (r.includes("http_403")) return "This app is not allowed to place voice calls yet: check the voice product is activated.";
   return "Check the Africa's Talking dashboard for this app.";
 }
@@ -216,28 +243,41 @@ function describeQueueOutcome(outcome: string): string {
  * Demo workspace only: ring the phone on this teacher's record now, as DIRA would after a
  * lesson, so the call, its transcript and the draft can be shown end to end.
  */
-async function placeWorkspaceDemoCallAction() {
+async function placeWorkspaceDemoCallAction(formData: FormData) {
   "use server";
   const teacher = await getSignedInTeacher();
   if (!teacher) {
     redirect("/follow-up-calls?demoCall=unavailable");
   }
   const context = { teacher_id: teacher.teacher_id, school_id: teacher.school_id };
+  const check = normalisePhone(String(formData.get("country") ?? ""), String(formData.get("number") ?? ""));
+  if (!check.ok) {
+    redirect(`/follow-up-calls?demoCall=invalid_number&reason=${encodeURIComponent(check.message)}`);
+  }
   let outcome = "unavailable";
   let reason = "";
+  let reservation: string | null = null;
   try {
     const queued = await queueDemoWorkspaceCall(context);
-    const result = await dispatchOneDueFollowUp(new Date(), context, queued.follow_up_job_id);
+    reservation = await reserveWorkspaceCall(check.e164);
+    const result = await dispatchOneDueFollowUp(new Date(), context, queued.follow_up_job_id, {
+      demoWorkspaceDestination: check.e164,
+    });
     outcome = result?.status ?? "not_queued";
     reason = result?.error_code ?? "";
   } catch (error) {
-    if (error instanceof DemoCallError) {
+    if (error instanceof WorkspaceCallLimitError) {
+      outcome = "number_limit";
+    } else if (error instanceof DemoCallError) {
       outcome = error.code;
     } else {
       console.error("Could not place the demo call", {
         errorName: error instanceof Error ? error.name : "UnknownError",
       });
     }
+  }
+  if (reservation) {
+    await finishWorkspaceCall(reservation, outcome === "provider_accepted").catch(() => undefined);
   }
   revalidatePath("/follow-up-calls");
   redirect(
@@ -300,6 +340,7 @@ export default async function FollowUpCallsPage({
   const { demoCall, queued, reason } = await searchParams;
   const signedIn = await getSignedInTeacher();
   let isDemoWorkspace = false;
+  let lastCall: Awaited<ReturnType<typeof latestCallStatus>> = null;
   if (signedIn) {
     try {
       const flag = await getPool().query<{ is_demo: boolean }>(
@@ -307,6 +348,7 @@ export default async function FollowUpCallsPage({
         [signedIn.school_id],
       );
       isDemoWorkspace = flag.rows[0]?.is_demo === true && process.env.DIRA_DEMO_WORKSPACE_CALLS !== "false";
+      if (isDemoWorkspace) lastCall = await latestCallStatus(signedIn.teacher_id);
     } catch {
       isDemoWorkspace = false;
     }
@@ -438,20 +480,22 @@ export default async function FollowUpCallsPage({
               Call me now (demo)
             </h2>
             <p className="text-sm text-gray-700 dark:text-gray-300">
-              Rings the phone on this teacher&apos;s record, the way DIRA calls a teacher after a
-              lesson. Answer, say a sentence or two about a learner, and hang up. The recording is
+              Enter a phone number and DIRA calls it the way it calls a teacher after a lesson.
+              Answer, say a sentence or two about a learner, and hang up. The recording is
               transcribed and a draft appears under{" "}
               <Link href="/call-drafts" className="underline">Call Drafts</Link>, where you assign
               it to the right learner and, if one is waiting, the right test.
             </p>
-            <form action={placeWorkspaceDemoCallAction}>
-              <button
-                type="submit"
-                className="rounded-md bg-dira-teal px-4 py-2 text-sm font-medium text-white hover:bg-dira-teal-deep"
-              >
-                Call me now
-              </button>
-            </form>
+            <DemoCallNumberForm action={placeWorkspaceDemoCallAction} />
+            {lastCall && (
+              <p className="text-xs text-gray-600 dark:text-gray-400">
+                Last call: {CALL_STATUS_TEXT[lastCall.status] ?? lastCall.status}
+                {lastCall.duration_seconds ? ` (${lastCall.duration_seconds} s)` : ""}
+                {" · "}
+                {new Date(lastCall.at).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}.
+                {" "}Refresh the page to update.
+              </p>
+            )}
           </Card>
         )}
 
@@ -487,7 +531,10 @@ export default async function FollowUpCallsPage({
         {demoCall && (
           <Card className="border border-blue-300 p-4 text-sm text-blue-900 dark:border-blue-800 dark:text-blue-200" role="status">
             {describeDemoCall(demoCall)}
-            {reason && (
+            {reason && demoCall === "invalid_number" && (
+              <span className="mt-1 block">{reason}</span>
+            )}
+            {reason && demoCall !== "invalid_number" && (
               <span className="mt-1 block text-xs">
                 Africa&apos;s Talking said: <code>{reason}</code>. {explainProviderReason(reason)}
               </span>
