@@ -49,6 +49,10 @@ export type FollowUpDispatchAuthorization =
   | {
       publicDemoCallAuthorized: true;
       destinationOverride: string;
+    }
+  | {
+      /** A number typed into the demo workspace's Call me now; only for a manual demo job. */
+      demoWorkspaceDestination: string;
     };
 
 /**
@@ -70,6 +74,13 @@ export async function dispatchOneDueFollowUp(
   const publicDemoAuthorization =
     authorization && "publicDemoCallAuthorized" in authorization
       ? authorization
+      : null;
+  // Used only together with a manual demo job; in real mode the claim query allows those
+  // only in a demo workspace, so a real school's call can never be redirected.
+  const workspaceDestination =
+    authorization && "demoWorkspaceDestination" in authorization && manualDemoJobId &&
+    isE164(authorization.demoWorkspaceDestination)
+      ? authorization.demoWorkspaceDestination
       : null;
   const operatorAuthorized =
     authorization !== undefined &&
@@ -109,7 +120,9 @@ export async function dispatchOneDueFollowUp(
 
   const destination = publicDemoAuthorization
     ? publicDemoAuthorization.destinationOverride
-    : config.mode === "demo"
+    : workspaceDestination
+      ? workspaceDestination
+      : config.mode === "demo"
       ? config.destination
       : claimed.teacher_phone;
   if (!destination || !isE164(destination)) {
